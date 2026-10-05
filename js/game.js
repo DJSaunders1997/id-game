@@ -250,7 +250,54 @@ function updatePoolInfo() {
     else if (PROMPT_PACKS[cat]) count += PROMPT_PACKS[cat].length;
   });
   $('#prompt-pool-info').textContent = count > 0 ? `${count} prompts in the pool` : 'Select at least one pack';
+
+  const toggleBtn = $('#toggle-pool-preview');
+  const preview = $('#pool-preview');
+  if (count > 0) {
+    toggleBtn.style.display = 'inline-block';
+  } else {
+    toggleBtn.style.display = 'none';
+    preview.style.display = 'none';
+    toggleBtn.textContent = 'Show all prompts';
+  }
+  if (preview.style.display !== 'none') renderPoolPreview();
 }
+
+function renderPoolPreview() {
+  const preview = $('#pool-preview');
+  let html = '';
+  state.activeCategories.forEach(cat => {
+    if (cat === 'custom') {
+      if (state.customPrompts.length > 0) {
+        html += `<div class="pool-cat-label">${PACK_INFO.custom.emoji} Custom</div>`;
+        state.customPrompts.forEach(p => {
+          html += `<div class="pool-prompt">${p.text}</div>`;
+        });
+      }
+    } else if (PROMPT_PACKS[cat]) {
+      const info = PACK_INFO[cat];
+      html += `<div class="pool-cat-label">${info.emoji} ${info.label}</div>`;
+      PROMPT_PACKS[cat].forEach(text => {
+        html += `<div class="pool-prompt">${text}</div>`;
+      });
+    }
+  });
+  preview.innerHTML = html;
+}
+
+// ---- Pool preview toggle ----
+$('#toggle-pool-preview').addEventListener('click', () => {
+  const preview = $('#pool-preview');
+  const btn = $('#toggle-pool-preview');
+  if (preview.style.display === 'none') {
+    renderPoolPreview();
+    preview.style.display = 'block';
+    btn.textContent = 'Hide prompts';
+  } else {
+    preview.style.display = 'none';
+    btn.textContent = 'Show all prompts';
+  }
+});
 
 // ---- Custom prompts on home screen ----
 const customPromptInput = $('#custom-prompt-input');

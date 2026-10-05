@@ -623,6 +623,42 @@ textarea {
   color: var(--accent);
 }
 
+/* ---- Pool preview ---- */
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 0;
+  margin-top: 4px;
+}
+.btn-link:hover { text-decoration: underline; }
+.pool-preview {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-top: 8px;
+  border-top: 1px solid var(--surface-2);
+  padding-top: 8px;
+}
+.pool-preview .pool-prompt {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  padding: 4px 0;
+  border-bottom: 1px solid var(--surface-2);
+}
+.pool-preview .pool-cat-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  margin-top: 10px;
+  margin-bottom: 4px;
+}
+
 /* ---- Prompt pick screen ---- */
 .prompt-pick-options {
   display: flex;
@@ -650,6 +686,16 @@ textarea {
 }
 
 /* ---- Submit prompts screen ---- */
+#screen-submit {
+  overflow-y: auto;
+}
+.submit-bottom {
+  position: sticky;
+  bottom: 0;
+  padding: 12px 0 20px;
+  background: linear-gradient(to bottom, transparent, var(--bg) 8px);
+  z-index: 10;
+}
 .submit-header {
   text-align: center;
   padding: 20px 0;
