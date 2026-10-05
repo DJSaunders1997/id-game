@@ -40,6 +40,61 @@ let state = {
 };
 
 // ============================================================
+//  CONFETTI
+// ============================================================
+function launchConfetti() {
+  const canvas = document.getElementById('confetti-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  canvas.style.display = 'block';
+
+  const colors = ['#7c3aed', '#e11d75', '#f59e0b', '#16a34a', '#3b82f6', '#ec4899'];
+  const particles = [];
+  for (let i = 0; i < 150; i++) {
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: -10 - Math.random() * canvas.height * 0.5,
+      w: 4 + Math.random() * 6,
+      h: 8 + Math.random() * 8,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      vx: (Math.random() - 0.5) * 4,
+      vy: 2 + Math.random() * 4,
+      rotation: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() - 0.5) * 0.2,
+      opacity: 1,
+    });
+  }
+
+  let frame = 0;
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let alive = false;
+    particles.forEach(p => {
+      p.x += p.vx;
+      p.vy += 0.05;
+      p.y += p.vy;
+      p.rotation += p.rotSpeed;
+      if (frame > 60) p.opacity -= 0.01;
+      if (p.opacity <= 0) return;
+      alive = true;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, p.opacity);
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rotation);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    });
+    frame++;
+    if (alive) requestAnimationFrame(animate);
+    else canvas.style.display = 'none';
+  }
+  requestAnimationFrame(animate);
+}
+
+// ============================================================
 //  HAPTIC FEEDBACK
 // ============================================================
 function haptic(pattern) {
@@ -863,6 +918,7 @@ function showGameOver() {
   renderTotalScores('#final-scores');
   SFX.victory(); haptic([50, 50, 50, 50]);
   showScreen('gameover');
+  launchConfetti();
 }
 
 $('#play-again-btn').addEventListener('click', () => {
