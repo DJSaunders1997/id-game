@@ -38,6 +38,7 @@ let state = {
   submitPlayerIndex: 0,
   playerSubmittedThisRound: [],
   streaks: {},
+  guessTimestamps: {},
 };
 
 // ============================================================
@@ -695,6 +696,7 @@ function handleTouchEnd(e) {
 $('#confirm-ranking-btn').addEventListener('click', () => {
   stopTimer();
   state.guesses = {};
+  state.guessTimestamps = {};
   state.roundScores = {};
   state.players.forEach(p => state.roundScores[p] = 0);
   SFX.select(); haptic(30);
@@ -743,6 +745,7 @@ function showGuessScreen() {
     const btn = e.target.closest('.guess-option');
     if (!btn || guessLocked) return;
     state.guesses[currentGuesser] = btn.dataset.prompt;
+    state.guessTimestamps[currentGuesser] = timerRemaining;
 
     const tab = tabsEl.querySelector(`[data-guesser="${currentGuesser}"]`);
     if (tab) tab.classList.add('guessed');
@@ -812,7 +815,11 @@ $('#submit-guesses-btn').addEventListener('click', () => {
     if (state.guesses[name] === state.currentPrompt) {
       state.streaks[name] = (state.streaks[name] || 0) + 1;
       const streakBonus = (state.streaks[name] - 1) * 50;
-      const pts = 100 + streakBonus;
+      let speedBonus = 0;
+      if (state.timerSeconds > 0 && state.guessTimestamps[name] != null) {
+        speedBonus = Math.round((state.guessTimestamps[name] / state.timerSeconds) * 50);
+      }
+      const pts = 100 + streakBonus + speedBonus;
       state.roundScores[name] = pts;
       state.scores[name] = (state.scores[name] || 0) + pts;
       correctCount++;
@@ -866,6 +873,10 @@ function showResults(correctCount, totalGuessers) {
     else if (isCreator) label = 'prompt bonus';
     else label = '&#10007;';
     if (streak >= 2) label += ` (${streak}x streak!)`;
+    if (guessedRight && state.timerSeconds > 0 && state.guessTimestamps[name] != null) {
+      const sb = Math.round((state.guessTimestamps[name] / state.timerSeconds) * 50);
+      if (sb > 0) label += ` +${sb} speed`;
+    }
     return `<div class="score-row">
       <span class="score-name">${name} ${label}</span>
       <span class="score-value">+${pts}</span>
