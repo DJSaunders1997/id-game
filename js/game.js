@@ -39,6 +39,8 @@ let state = {
   playerSubmittedThisRound: [],
   streaks: {},
   guessTimestamps: {},
+  usedCustomPrompts: [],
+  promptVotes: {},
 };
 
 // ============================================================
@@ -380,6 +382,8 @@ function buildPoolAndStart() {
   state.rankerIndex = 0;
   state.scores = {};
   state.streaks = {};
+  state.usedCustomPrompts = [];
+  state.promptVotes = {};
   state.players.forEach(p => { state.scores[p] = 0; state.streaks[p] = 0; });
 
   SFX.roundStart(); haptic(30);
@@ -561,6 +565,10 @@ $('#pick-prompt-btn').addEventListener('click', () => {
   state.currentPrompt = pickedPromptObj.text;
   state.currentPromptCreator = pickedPromptObj.creator;
   state.usedPrompts.push(pickedPromptObj.text);
+
+  if (pickedPromptObj.creator && !state.usedCustomPrompts.some(p => p.text === pickedPromptObj.text)) {
+    state.usedCustomPrompts.push({ text: pickedPromptObj.text, creator: pickedPromptObj.creator });
+  }
 
   const decoyPool = state.promptPool.filter(p => p.text !== state.currentPrompt);
   state.decoyPrompts = shuffle(decoyPool).slice(0, 3).map(p => p.text);
@@ -925,6 +933,14 @@ $('#next-round-btn').addEventListener('click', () => {
 });
 
 function showGameOver() {
+  if (state.usedCustomPrompts.length >= 2) {
+    showVoteScreen();
+  } else {
+    showFinalGameOver(null);
+  }
+}
+
+function showFinalGameOver(bestPrompt) {
   const sorted = [...state.players].sort((a, b) => (state.scores[b] || 0) - (state.scores[a] || 0));
   const topScore = state.scores[sorted[0]] || 0;
   const winners = sorted.filter(p => (state.scores[p] || 0) === topScore);
@@ -935,11 +951,106 @@ function showGameOver() {
     $('#winner-text').textContent = `It's a tie! ${winners.join(' & ')}`;
   }
 
+  const bpEl = $('#best-prompt-result');
+  if (bestPrompt) {
+    bpEl.innerHTML = `<div class="best-prompt-card">
+      <div class="best-label">Best Prompt</div>
+      <div class="best-text">${bestPrompt.text}</div>
+      <div class="best-meta">by ${bestPrompt.creator} - ${bestPrompt.votes} vote${bestPrompt.votes !== 1 ? 's' : ''}</div>
+    </div>`;
+  } else {
+    bpEl.innerHTML = '';
+  }
+
   renderTotalScores('#final-scores');
   SFX.victory(); haptic([50, 50, 50, 50]);
   showScreen('gameover');
   launchConfetti();
 }
+
+// ============================================================
+//  BEST PROMPT VOTE
+// ============================================================
+function showVoteScreen() {
+  state.promptVotes = {};
+
+  const tabsEl = $('#voter-tabs');
+  tabsEl.innerHTML = state.players.map((name, i) =>
+    `<button class="guesser-tab ${i === 0 ? 'active' : ''}" data-voter="${name}">${name}</button>`
+  ).join('');
+
+  const optionsEl = $('#vote-options');
+  optionsEl.innerHTML = state.usedCustomPrompts.map((p, i) =>
+    `<button class="vote-option" data-index="${i}">
+      ${p.text}
+      <span class="vote-creator">by ${p.creator}</span>
+    </button>`
+  ).join('');
+
+  let currentVoter = state.players[0];
+  updateVoteUI(currentVoter);
+
+  tabsEl.onclick = (e) => {
+    if (e.target.classList.contains('guesser-tab')) {
+      currentVoter = e.target.dataset.voter;
+      $$('#voter-tabs .guesser-tab').forEach(t => t.classList.remove('active'));
+      e.target.classList.add('active');
+      updateVoteUI(currentVoter);
+    }
+  };
+
+  optionsEl.onclick = (e) => {
+    const btn = e.target.closest('.vote-option');
+    if (!btn) return;
+    const idx = +btn.dataset.index;
+    state.promptVotes[currentVoter] = idx;
+    SFX.tap(); haptic(15);
+
+    const tab = tabsEl.querySelector(`[data-voter="${currentVoter}"]`);
+    if (tab) tab.classList.add('guessed');
+    updateVoteUI(currentVoter);
+
+    const nextUn = state.players.find(p => state.promptVotes[p] == null && p !== currentVoter);
+    const allVoted = state.players.every(p => state.promptVotes[p] != null);
+    $('#submit-votes-btn').disabled = !allVoted;
+
+    if (nextUn) {
+      setTimeout(() => {
+        currentVoter = nextUn;
+        $$('#voter-tabs .guesser-tab').forEach(t => t.classList.remove('active'));
+        tabsEl.querySelector(`[data-voter="${nextUn}"]`).classList.add('active');
+        updateVoteUI(nextUn);
+      }, 400);
+    }
+  };
+
+  showScreen('vote');
+}
+
+function updateVoteUI(voter) {
+  $('#voter-label').textContent = `${voter}'s pick`;
+  const selected = state.promptVotes[voter];
+  $$('.vote-option').forEach((opt, i) => {
+    opt.classList.toggle('selected', i === selected);
+  });
+}
+
+$('#submit-votes-btn').addEventListener('click', () => {
+  const tally = {};
+  state.usedCustomPrompts.forEach((_, i) => tally[i] = 0);
+  Object.values(state.promptVotes).forEach(idx => {
+    tally[idx] = (tally[idx] || 0) + 1;
+  });
+
+  let bestIdx = 0;
+  let bestCount = 0;
+  Object.entries(tally).forEach(([idx, count]) => {
+    if (count > bestCount) { bestIdx = +idx; bestCount = count; }
+  });
+
+  const best = state.usedCustomPrompts[bestIdx];
+  showFinalGameOver({ text: best.text, creator: best.creator, votes: bestCount });
+});
 
 $('#play-again-btn').addEventListener('click', () => {
   state.currentRound = 1;
@@ -949,6 +1060,8 @@ $('#play-again-btn').addEventListener('click', () => {
   state.currentPromptCreator = null;
   state.scores = {};
   state.streaks = {};
+  state.usedCustomPrompts = [];
+  state.promptVotes = {};
   state.players.forEach(p => { state.scores[p] = 0; state.streaks[p] = 0; });
 
   if (state.activeCategories.includes('custom')) {

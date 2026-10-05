@@ -610,6 +610,65 @@ textarea {
 }
 .saved-prompts-actions .btn { flex: 1; }
 
+/* ---- Vote screen ---- */
+.vote-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0;
+}
+.vote-option {
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 2px solid var(--surface-2);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.vote-option:hover { border-color: var(--accent); }
+.vote-option.selected {
+  border-color: var(--accent);
+  background: rgba(124, 58, 237, 0.08);
+}
+.vote-option .vote-creator {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  font-weight: 400;
+  margin-top: 4px;
+}
+
+.best-prompt-card {
+  text-align: center;
+  padding: 20px;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  margin-bottom: 20px;
+  box-shadow: 0 0 30px var(--accent-glow);
+}
+.best-prompt-card .best-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.best-prompt-card .best-text {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+.best-prompt-card .best-meta {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-top: 8px;
+}
+
 .time-setting {
   display: flex;
   align-items: center;

@@ -223,6 +223,25 @@
     </div>
   </div>
 
+  <!-- ====== SCREEN: VOTE ====== -->
+  <div id="screen-vote" class="screen">
+    <div class="header">
+      <h1>Best Prompt</h1>
+      <p>Vote for your favourite custom prompt!</p>
+    </div>
+
+    <div class="guesser-tabs" id="voter-tabs"></div>
+
+    <div id="vote-area">
+      <div class="section-title" id="voter-label">Pick your favourite</div>
+      <div class="vote-options" id="vote-options"></div>
+    </div>
+
+    <div class="mt-auto" style="padding-bottom: 20px;">
+      <button class="btn btn-primary btn-block" id="submit-votes-btn" disabled>Reveal Best Prompt</button>
+    </div>
+  </div>
+
   <!-- ====== SCREEN: GAME OVER ====== -->
   <div id="screen-gameover" class="screen">
     <div class="header">
@@ -231,6 +250,7 @@
 
     <div class="final-scores">
       <div class="winner" id="winner-text"></div>
+      <div id="best-prompt-result"></div>
       <div class="section-title">Final Scores</div>
       <div class="scoreboard" id="final-scores"></div>
     </div>
