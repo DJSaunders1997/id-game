@@ -89,6 +89,66 @@
       <div class="text-dim" style="font-size:0.8rem;">0 = no timer</div>
     </div>
 
+    <div class="card">
+      <div class="section-title">Play Mode</div>
+      <div class="mode-toggle" id="mode-toggle">
+        <button class="mode-btn active" data-mode="digital">Digital</button>
+        <button class="mode-btn" data-mode="physical">Physical Cards</button>
+      </div>
+      <div class="text-dim" style="font-size:0.8rem; margin-top:8px;" id="mode-description">Rank on screen with drag-and-drop</div>
+    </div>
+
+    <div class="card" id="physical-settings" style="display:none;">
+      <div class="section-title">Physical Cards Settings</div>
+
+      <div class="setting-row">
+        <label>Cards to choose from</label>
+        <div class="text-dim" style="font-size:0.75rem;">How many prompt cards the ranker picks from</div>
+        <div class="number-selector" style="margin:6px 0;">
+          <button id="pick-count-minus">-</button>
+          <div class="num" id="pick-count-num">5</div>
+          <button id="pick-count-plus">+</button>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <label>Guess options</label>
+        <div class="text-dim" style="font-size:0.75rem;">How many choices each guesser sees (including the correct one)</div>
+        <div class="number-selector" style="margin:6px 0;">
+          <button id="guess-count-minus">-</button>
+          <div class="num" id="guess-count-num">4</div>
+          <button id="guess-count-plus">+</button>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <label>Card replacement</label>
+        <div class="text-dim" style="font-size:0.75rem;">Which cards get removed from the pool after each turn</div>
+        <div class="mode-toggle" id="replace-toggle">
+          <button class="mode-btn active" data-replace="used">Only picked</button>
+          <button class="mode-btn" data-replace="all">All shown</button>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <label>Show ranking on phone</label>
+        <div class="text-dim" style="font-size:0.75rem;">Display the ranking order on the guess screen</div>
+        <div class="mode-toggle" id="show-ranking-toggle">
+          <button class="mode-btn active" data-val="false">Hidden</button>
+          <button class="mode-btn" data-val="true">Visible</button>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <label>Who enters guesses</label>
+        <div class="text-dim" style="font-size:0.75rem;">Ranker keeps the phone vs passing to each guesser</div>
+        <div class="mode-toggle" id="guesser-entry-toggle">
+          <button class="mode-btn active" data-val="true">Ranker enters all</button>
+          <button class="mode-btn" data-val="false">Pass to each player</button>
+        </div>
+      </div>
+    </div>
+
     <details class="scoring-details card">
       <summary class="scoring-summary">
         <span class="scoring-summary-text">How scoring works</span>
@@ -173,7 +233,7 @@
 
     <div class="text-center" style="padding: 16px 0;">
       <div class="section-title">Choose a prompt to rank by</div>
-      <div class="text-dim" style="font-size: 0.85rem;">Pick the one you like best - don't let anyone see!</div>
+      <div class="text-dim" style="font-size: 0.85rem;" id="pick-hint-text">Pick the one you like best - don't let anyone see!</div>
     </div>
 
     <div class="prompt-pick-options" id="prompt-pick-options"></div>
@@ -214,7 +274,7 @@
   <div id="screen-guess" class="screen">
     <div class="round-info">
       <span id="guess-round-label"></span>
-      <span>Guess the prompt!</span>
+      <span id="guess-header-text">Guess the prompt!</span>
     </div>
     <div id="guess-timer" class="timer-bar" style="display:none;">
       <div class="timer-track"><div class="timer-fill" id="guess-timer-fill"></div></div>

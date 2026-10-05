@@ -23,6 +23,13 @@ let state = {
   activeCategories: ['standard'],
   totalRounds: 2,               // 1 round = everyone ranks once
   timerSeconds: 120,
+  playMode: 'digital',          // 'digital' or 'physical'
+  // Physical cards settings
+  physicalPickCount: 5,         // how many prompts the ranker picks from
+  physicalGuessCount: 4,        // how many options each guesser sees (1 correct + N-1 decoys)
+  physicalCardReplace: 'used',  // 'used' = only remove picked card, 'all' = replace all shown cards
+  physicalShowRanking: false,   // whether to show the ranking on guess screen (physical = no ranking on phone)
+  physicalRankerGuesses: true,  // ranker enters guesses for all players (keeps phone)
   currentRound: 0,
   currentTurnInRound: 0,
   rankerIndex: 0,
@@ -393,6 +400,81 @@ $('#timer-plus').addEventListener('click', () => {
   }
 });
 
+// ---- Play mode toggle ----
+const modeDescriptions = {
+  digital: 'Rank on screen with drag-and-drop',
+  physical: 'Use real cards - ranker keeps the phone'
+};
+
+$('#mode-toggle').addEventListener('click', (e) => {
+  const btn = e.target.closest('.mode-btn');
+  if (!btn) return;
+  state.playMode = btn.dataset.mode;
+  $$('#mode-toggle .mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  $('#mode-description').textContent = modeDescriptions[state.playMode];
+  $('#physical-settings').style.display = state.playMode === 'physical' ? 'block' : 'none';
+  SFX.tap(); haptic(15);
+});
+
+// ---- Physical cards settings ----
+$('#pick-count-minus').addEventListener('click', () => {
+  if (state.physicalPickCount > 2) {
+    state.physicalPickCount--;
+    $('#pick-count-num').textContent = state.physicalPickCount;
+    SFX.tap(); haptic(15);
+  }
+});
+$('#pick-count-plus').addEventListener('click', () => {
+  if (state.physicalPickCount < 10) {
+    state.physicalPickCount++;
+    $('#pick-count-num').textContent = state.physicalPickCount;
+    SFX.tap(); haptic(15);
+  }
+});
+
+$('#guess-count-minus').addEventListener('click', () => {
+  if (state.physicalGuessCount > 2) {
+    state.physicalGuessCount--;
+    $('#guess-count-num').textContent = state.physicalGuessCount;
+    SFX.tap(); haptic(15);
+  }
+});
+$('#guess-count-plus').addEventListener('click', () => {
+  if (state.physicalGuessCount < 8) {
+    state.physicalGuessCount++;
+    $('#guess-count-num').textContent = state.physicalGuessCount;
+    SFX.tap(); haptic(15);
+  }
+});
+
+$('#replace-toggle').addEventListener('click', (e) => {
+  const btn = e.target.closest('.mode-btn');
+  if (!btn) return;
+  state.physicalCardReplace = btn.dataset.replace;
+  $$('#replace-toggle .mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  SFX.tap(); haptic(15);
+});
+
+$('#show-ranking-toggle').addEventListener('click', (e) => {
+  const btn = e.target.closest('.mode-btn');
+  if (!btn) return;
+  state.physicalShowRanking = btn.dataset.val === 'true';
+  $$('#show-ranking-toggle .mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  SFX.tap(); haptic(15);
+});
+
+$('#guesser-entry-toggle').addEventListener('click', (e) => {
+  const btn = e.target.closest('.mode-btn');
+  if (!btn) return;
+  state.physicalRankerGuesses = btn.dataset.val === 'true';
+  $$('#guesser-entry-toggle .mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  SFX.tap(); haptic(15);
+});
+
 // ============================================================
 //  START GAME
 // ============================================================
@@ -418,8 +500,11 @@ function buildPoolAndStart() {
     }
   });
 
-  if (pool.length < 5) {
-    alert(`Need at least 5 prompts to play (the ranker picks from 5 options). Got ${pool.length}.`);
+  const minPool = state.playMode === 'physical'
+    ? Math.max(state.physicalPickCount, state.physicalGuessCount)
+    : 5;
+  if (pool.length < minPool) {
+    alert(`Need at least ${minPool} prompts to play. Got ${pool.length}.`);
     return;
   }
 
@@ -537,13 +622,14 @@ function shuffle(arr) {
   return a;
 }
 
-function pick5Prompts() {
+function pickPrompts() {
+  const count = state.playMode === 'physical' ? state.physicalPickCount : 5;
   let available = state.promptPool.filter(p => !state.usedPrompts.includes(p.text));
-  if (available.length < 5) {
+  if (available.length < count) {
     state.usedPrompts = [];
     available = [...state.promptPool];
   }
-  return shuffle(available).slice(0, 5);
+  return shuffle(available).slice(0, count);
 }
 
 function getRoundLabel() {
@@ -562,8 +648,17 @@ function startTurn() {
   state.currentTurnInRound++;
   const ranker = state.players[state.rankerIndex];
 
+  const instructions = $$('#screen-pass .pass-device .instruction');
   $('#pass-player-name').textContent = ranker;
   $('#pass-round-info').textContent = getRoundLabel();
+
+  if (state.playMode === 'physical' && state.physicalRankerGuesses) {
+    instructions[0].textContent = 'Next ranker:';
+    instructions[1].textContent = 'They rank with real cards, you enter guesses on the phone';
+  } else {
+    instructions[0].textContent = 'Pass the phone to';
+    instructions[1].textContent = "They're the ranker this turn";
+  }
   showScreen('pass');
 }
 
@@ -578,7 +673,8 @@ $('#ready-btn').addEventListener('click', () => {
 let pickedPromptObj = null;
 
 function showPickPrompt() {
-  const options = pick5Prompts();
+  const options = pickPrompts();
+  state.lastShownPrompts = options;
   const ranker = state.players[state.rankerIndex];
   pickedPromptObj = null;
 
@@ -603,6 +699,9 @@ function showPickPrompt() {
     SFX.tap(); haptic(15);
   };
 
+  $('#pick-hint-text').textContent = state.playMode === 'physical'
+    ? 'Pick a card, then rank the group using your real cards'
+    : "Pick the one you like best - don't let anyone see!";
   $('#pick-prompt-btn').disabled = true;
   showScreen('pick');
 }
@@ -614,15 +713,33 @@ $('#pick-prompt-btn').addEventListener('click', () => {
   state.currentPromptCreator = pickedPromptObj.creator;
   state.usedPrompts.push(pickedPromptObj.text);
 
+  // In physical mode with 'all' replacement, mark all shown prompts as used
+  if (state.playMode === 'physical' && state.physicalCardReplace === 'all' && state.lastShownPrompts) {
+    state.lastShownPrompts.forEach(p => {
+      if (!state.usedPrompts.includes(p.text)) state.usedPrompts.push(p.text);
+    });
+  }
+
   if (pickedPromptObj.creator && !state.usedCustomPrompts.some(p => p.text === pickedPromptObj.text)) {
     state.usedCustomPrompts.push({ text: pickedPromptObj.text, creator: pickedPromptObj.creator });
   }
 
+  const decoyCount = state.playMode === 'physical' ? state.physicalGuessCount - 1 : 3;
   const decoyPool = state.promptPool.filter(p => p.text !== state.currentPrompt);
-  state.decoyPrompts = shuffle(decoyPool).slice(0, 3).map(p => p.text);
+  state.decoyPrompts = shuffle(decoyPool).slice(0, decoyCount).map(p => p.text);
 
   SFX.select(); haptic(30);
-  showSecretRanking();
+
+  if (state.playMode === 'physical') {
+    state.currentRanking = [];
+    state.guesses = {};
+    state.guessTimestamps = {};
+    state.roundScores = {};
+    state.players.forEach(p => state.roundScores[p] = 0);
+    showGuessScreen();
+  } else {
+    showSecretRanking();
+  }
 });
 
 function showSecretRanking() {
@@ -792,16 +909,29 @@ $('#confirm-ranking-btn').addEventListener('click', () => {
 function showGuessScreen() {
   const ranker = state.players[state.rankerIndex];
   const guessers = state.players.filter(p => p !== ranker);
+  const isPhysical = state.playMode === 'physical';
+  const rankerEnters = isPhysical && state.physicalRankerGuesses;
 
   $('#guess-round-label').textContent = getRoundLabel();
+  $('#guess-header-text').textContent = rankerEnters
+    ? 'Enter each player\'s guess'
+    : 'Guess the prompt!';
 
   const revealEl = $('#ranking-reveal');
-  revealEl.innerHTML = state.currentRanking.map((name, i) =>
-    `<div class="rank-item">
-      <span class="rank-number">${i + 1}</span>
-      <span class="rank-name">${name}</span>
-    </div>`
-  ).join('');
+  const rankingSection = revealEl.parentElement;
+  if (isPhysical && !state.physicalShowRanking) {
+    rankingSection.style.display = 'none';
+  } else if (state.currentRanking.length > 0) {
+    rankingSection.style.display = '';
+    revealEl.innerHTML = state.currentRanking.map((name, i) =>
+      `<div class="rank-item">
+        <span class="rank-number">${i + 1}</span>
+        <span class="rank-name">${name}</span>
+      </div>`
+    ).join('');
+  } else {
+    rankingSection.style.display = 'none';
+  }
 
   const tabsEl = $('#guesser-tabs');
   tabsEl.innerHTML = guessers.map((name, i) =>
@@ -815,14 +945,14 @@ function showGuessScreen() {
   ).join('');
 
   let currentGuesser = guessers[0];
-  updateGuessUI(currentGuesser);
+  updateGuessUI(currentGuesser, rankerEnters);
 
   tabsEl.onclick = (e) => {
     if (e.target.classList.contains('guesser-tab')) {
       currentGuesser = e.target.dataset.guesser;
       $$('.guesser-tab').forEach(t => t.classList.remove('active'));
       e.target.classList.add('active');
-      updateGuessUI(currentGuesser);
+      updateGuessUI(currentGuesser, rankerEnters);
     }
   };
 
@@ -835,7 +965,7 @@ function showGuessScreen() {
 
     const tab = tabsEl.querySelector(`[data-guesser="${currentGuesser}"]`);
     if (tab) tab.classList.add('guessed');
-    updateGuessUI(currentGuesser);
+    updateGuessUI(currentGuesser, rankerEnters);
 
     guessLocked = true;
     btn.classList.add('locked');
@@ -846,9 +976,11 @@ function showGuessScreen() {
     const allGuessed = guessers.every(g => state.guesses[g]);
     $('#submit-guesses-btn').disabled = !allGuessed;
 
-    // Show "Guess submitted" overlay
     const overlay = document.getElementById('guess-overlay');
     overlay.querySelector('.overlay-name').textContent = currentGuesser;
+    overlay.querySelector('.overlay-text').textContent = rankerEnters
+      ? `${currentGuesser}'s guess recorded!`
+      : 'Guess locked in!';
     overlay.classList.add('visible');
 
     setTimeout(() => {
@@ -861,10 +993,14 @@ function showGuessScreen() {
         currentGuesser = nextUn;
         $$('.guesser-tab').forEach(t => t.classList.remove('active'));
         tabsEl.querySelector(`[data-guesser="${nextUn}"]`).classList.add('active');
-        updateGuessUI(nextUn);
+        updateGuessUI(nextUn, rankerEnters);
       }
     }, 1200);
   };
+
+  $('#submit-guesses-btn').textContent = rankerEnters
+    ? 'All Entered - Reveal'
+    : 'Everyone Guessed - Reveal';
 
   showScreen('guess');
 
@@ -885,8 +1021,10 @@ function showGuessScreen() {
   );
 }
 
-function updateGuessUI(guesser) {
-  $('#guesser-label').textContent = `${guesser}'s guess`;
+function updateGuessUI(guesser, rankerEnters) {
+  $('#guesser-label').textContent = rankerEnters
+    ? `What did ${guesser} guess?`
+    : `${guesser}'s guess`;
   const selected = state.guesses[guesser];
   $$('.guess-option').forEach(opt => {
     opt.classList.toggle('selected', opt.dataset.prompt === selected);
@@ -1198,9 +1336,25 @@ $('#new-game-btn').addEventListener('click', () => {
   state.submitPlayerIndex = 0;
   state.currentPromptCreator = null;
   state.activeCategories = ['standard'];
+  state.playMode = 'digital';
+  state.physicalPickCount = 5;
+  state.physicalGuessCount = 4;
+  state.physicalCardReplace = 'used';
+  state.physicalShowRanking = false;
+  state.physicalRankerGuesses = true;
   $$('.pack-card').forEach(b => {
     b.classList.toggle('active', b.dataset.cat === 'standard');
   });
+  $$('#mode-toggle .mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === 'digital');
+  });
+  $('#mode-description').textContent = modeDescriptions.digital;
+  $('#physical-settings').style.display = 'none';
+  $('#pick-count-num').textContent = '5';
+  $('#guess-count-num').textContent = '4';
+  $$('#replace-toggle .mode-btn').forEach(b => b.classList.toggle('active', b.dataset.replace === 'used'));
+  $$('#show-ranking-toggle .mode-btn').forEach(b => b.classList.toggle('active', b.dataset.val === 'false'));
+  $$('#guesser-entry-toggle .mode-btn').forEach(b => b.classList.toggle('active', b.dataset.val === 'true'));
   $('#rounds-num').textContent = '2';
   renderPlayers();
   renderCustomPrompts();
