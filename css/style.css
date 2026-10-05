@@ -301,16 +301,16 @@ textarea {
   cursor: grab;
   touch-action: none;
   user-select: none;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, margin 0.15s ease;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   position: relative;
+  will-change: transform;
 }
 .rank-item.dragging {
-  transform: scale(1.04);
-  box-shadow: 0 10px 40px rgba(124, 58, 237, 0.2);
-  opacity: 0.85;
   z-index: 10;
+  box-shadow: 0 12px 40px rgba(124, 58, 237, 0.25);
+  background: var(--surface);
   border: 2px solid var(--accent);
+  cursor: grabbing;
 }
 .rank-item .rank-number {
   width: 28px;
@@ -333,28 +333,6 @@ textarea {
   color: var(--text-dim);
   font-size: 1.2rem;
   flex-shrink: 0;
-}
-.rank-item.drop-target-above { margin-top: 28px; }
-.rank-item.drop-target-above::before {
-  content: '';
-  position: absolute;
-  top: -18px;
-  left: 10%;
-  right: 10%;
-  height: 4px;
-  background: var(--accent);
-  border-radius: 2px;
-}
-.rank-item.drop-target-below { margin-bottom: 28px; }
-.rank-item.drop-target-below::after {
-  content: '';
-  position: absolute;
-  bottom: -18px;
-  left: 10%;
-  right: 10%;
-  height: 4px;
-  background: var(--accent);
-  border-radius: 2px;
 }
 
 /* ---- Guess options ---- */

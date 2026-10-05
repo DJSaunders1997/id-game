@@ -647,104 +647,133 @@ function showSecretRanking() {
 }
 
 // ============================================================
-//  DRAG & DROP RANKING
+//  DRAG & DROP RANKING (pointer-based, smooth reorder)
 // ============================================================
-let dragIndex = null;
+let sortState = null;
 
 function renderRankList() {
   const list = $('#rank-list');
   list.innerHTML = state.currentRanking.map((name, i) =>
-    `<li class="rank-item" data-index="${i}" draggable="true">
+    `<li class="rank-item" data-index="${i}">
       <span class="rank-number">${i + 1}</span>
       <span class="rank-name">${name}</span>
       <span class="drag-handle">&#9776;</span>
     </li>`
   ).join('');
-  attachDragListeners();
+  attachSortListeners();
 }
 
-function attachDragListeners() {
+function attachSortListeners() {
   const items = $$('#rank-list .rank-item');
   items.forEach(item => {
-    item.addEventListener('touchstart', handleTouchStart, { passive: false });
-    item.addEventListener('touchmove', handleTouchMove, { passive: false });
-    item.addEventListener('touchend', handleTouchEnd);
-    item.addEventListener('dragstart', handleDragStart);
-    item.addEventListener('dragover', handleDragOver);
-    item.addEventListener('drop', handleDrop);
-    item.addEventListener('dragend', handleDragEnd);
+    item.addEventListener('pointerdown', onSortStart);
   });
 }
 
-function handleDragStart(e) {
-  dragIndex = +e.currentTarget.dataset.index;
-  e.currentTarget.classList.add('dragging');
-  e.dataTransfer.effectAllowed = 'move';
-}
-function handleDragOver(e) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-}
-function handleDrop(e) {
-  e.preventDefault();
-  const dropIndex = +e.currentTarget.dataset.index;
-  if (dragIndex !== null && dragIndex !== dropIndex) {
-    const [moved] = state.currentRanking.splice(dragIndex, 1);
-    state.currentRanking.splice(dropIndex, 0, moved);
-    SFX.tap(); haptic(15);
-    renderRankList();
-  }
-}
-function handleDragEnd(e) {
-  dragIndex = null;
-  $$('.rank-item').forEach(el => el.classList.remove('dragging'));
-}
+function onSortStart(e) {
+  if (e.button && e.button !== 0) return;
+  const item = e.currentTarget;
+  const list = item.parentElement;
+  const items = Array.from(list.children);
+  const idx = items.indexOf(item);
+  const rect = item.getBoundingClientRect();
+  const listRect = list.getBoundingClientRect();
 
-let touchStartY = 0;
-let touchCurrentItem = null;
+  // Measure all item heights and positions before drag
+  const rects = items.map(el => el.getBoundingClientRect());
+  const itemHeight = rect.height + 8; // height + margin-bottom
 
-function handleTouchStart(e) {
-  touchCurrentItem = e.currentTarget;
-  dragIndex = +touchCurrentItem.dataset.index;
-  touchStartY = e.touches[0].clientY;
-  touchCurrentItem.classList.add('dragging');
-}
-function handleTouchMove(e) {
-  e.preventDefault();
-  const touchY = e.touches[0].clientY;
-  const items = Array.from($$('#rank-list .rank-item'));
-  items.forEach(el => el.classList.remove('drop-target-above', 'drop-target-below'));
-  for (const item of items) {
-    if (+item.dataset.index === dragIndex) continue;
-    const rect = item.getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    if (touchY >= rect.top && touchY <= rect.bottom) {
-      item.classList.add(touchY < midY ? 'drop-target-above' : 'drop-target-below');
-      break;
-    }
-  }
-}
-function handleTouchEnd(e) {
-  const touchY = e.changedTouches[0].clientY;
-  const items = Array.from($$('#rank-list .rank-item'));
-  items.forEach(el => el.classList.remove('drop-target-above', 'drop-target-below', 'dragging'));
-  for (let i = 0; i < items.length; i++) {
-    const rect = items[i].getBoundingClientRect();
-    if (touchY >= rect.top && touchY <= rect.bottom) {
-      const midY = rect.top + rect.height / 2;
-      let dropIndex = touchY < midY ? i : i + 1;
-      if (dragIndex !== null && dragIndex !== dropIndex) {
-        const [moved] = state.currentRanking.splice(dragIndex, 1);
-        if (dropIndex > dragIndex) dropIndex--;
-        state.currentRanking.splice(dropIndex, 0, moved);
-        SFX.tap(); haptic(15);
-        renderRankList();
+  item.classList.add('dragging');
+  item.setPointerCapture(e.pointerId);
+
+  sortState = {
+    item,
+    list,
+    items,
+    idx,
+    currentIdx: idx,
+    startY: e.clientY,
+    offsetY: 0,
+    itemHeight,
+    rects,
+  };
+
+  // Disable transitions on dragged item during move
+  item.style.transition = 'box-shadow 0.2s ease';
+
+  const onMove = (ev) => {
+    if (!sortState) return;
+    ev.preventDefault();
+    const dy = ev.clientY - sortState.startY;
+    sortState.offsetY = dy;
+
+    // Move dragged item
+    sortState.item.style.transform = `translateY(${dy}px) scale(1.03)`;
+
+    // Figure out where the item would land
+    const draggedCenter = sortState.rects[sortState.idx].top + sortState.rects[sortState.idx].height / 2 + dy;
+    let newIdx = sortState.idx;
+
+    for (let i = 0; i < sortState.rects.length; i++) {
+      const mid = sortState.rects[i].top + sortState.rects[i].height / 2;
+      if (draggedCenter < mid) {
+        newIdx = i;
+        break;
       }
-      break;
+      newIdx = i + 1;
     }
-  }
-  dragIndex = null;
-  touchCurrentItem = null;
+    newIdx = Math.max(0, Math.min(newIdx, sortState.items.length - 1));
+    if (newIdx > sortState.idx) newIdx = Math.min(newIdx, sortState.items.length - 1);
+
+    if (newIdx !== sortState.currentIdx) {
+      sortState.currentIdx = newIdx;
+      SFX.tap(); haptic(10);
+    }
+
+    // Shift other items to make room
+    sortState.items.forEach((el, i) => {
+      if (i === sortState.idx) return;
+      let shift = 0;
+      if (sortState.idx < newIdx && i > sortState.idx && i <= newIdx) {
+        shift = -sortState.itemHeight;
+      } else if (sortState.idx > newIdx && i < sortState.idx && i >= newIdx) {
+        shift = sortState.itemHeight;
+      }
+      el.style.transition = 'transform 0.2s ease';
+      el.style.transform = shift ? `translateY(${shift}px)` : '';
+    });
+  };
+
+  const onEnd = () => {
+    if (!sortState) return;
+    const { idx: fromIdx, currentIdx: toIdx } = sortState;
+
+    // Reset all transforms
+    sortState.items.forEach(el => {
+      el.style.transition = '';
+      el.style.transform = '';
+    });
+    sortState.item.classList.remove('dragging');
+    sortState.item.style.transition = '';
+
+    // Apply reorder if changed
+    if (fromIdx !== toIdx) {
+      const [moved] = state.currentRanking.splice(fromIdx, 1);
+      state.currentRanking.splice(toIdx, 0, moved);
+      haptic(15);
+    }
+
+    sortState.item.removeEventListener('pointermove', onMove);
+    sortState.item.removeEventListener('pointerup', onEnd);
+    sortState.item.removeEventListener('pointercancel', onEnd);
+    sortState = null;
+
+    renderRankList();
+  };
+
+  item.addEventListener('pointermove', onMove);
+  item.addEventListener('pointerup', onEnd);
+  item.addEventListener('pointercancel', onEnd);
 }
 
 // ============================================================
