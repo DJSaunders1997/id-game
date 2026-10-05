@@ -40,6 +40,13 @@ let state = {
 };
 
 // ============================================================
+//  HAPTIC FEEDBACK
+// ============================================================
+function haptic(pattern) {
+  try { navigator.vibrate && navigator.vibrate(pattern); } catch (_) {}
+}
+
+// ============================================================
 //  DOM REFERENCES
 // ============================================================
 const $ = (sel) => document.querySelector(sel);
@@ -136,7 +143,7 @@ function addPlayer() {
   state.players.push(name);
   playerInput.value = '';
   playerInput.focus();
-  SFX.tap();
+  SFX.tap(); haptic(15);
   renderPlayers();
 }
 
@@ -163,7 +170,7 @@ function initCategoryToggles() {
   container.querySelectorAll('.cat-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
       btn.classList.toggle('active');
-      SFX.tap();
+      SFX.tap(); haptic(15);
       updateActiveCategories();
     });
   });
@@ -214,7 +221,7 @@ function addCustomPrompt() {
   state.customPrompts.push({ text, creator: null });
   customPromptInput.value = '';
   customPromptInput.focus();
-  SFX.tap();
+  SFX.tap(); haptic(15);
   renderCustomPrompts();
 }
 
@@ -252,14 +259,14 @@ $('#rounds-minus').addEventListener('click', () => {
   if (state.totalRounds > 1) {
     state.totalRounds--;
     $('#rounds-num').textContent = state.totalRounds;
-    SFX.tap();
+    SFX.tap(); haptic(15);
   }
 });
 $('#rounds-plus').addEventListener('click', () => {
   if (state.totalRounds < 10) {
     state.totalRounds++;
     $('#rounds-num').textContent = state.totalRounds;
-    SFX.tap();
+    SFX.tap(); haptic(15);
   }
 });
 
@@ -268,14 +275,14 @@ $('#timer-minus').addEventListener('click', () => {
   if (state.timerSeconds > 0) {
     state.timerSeconds = Math.max(0, state.timerSeconds - 15);
     $('#timer-num').textContent = state.timerSeconds || 'Off';
-    SFX.tap();
+    SFX.tap(); haptic(15);
   }
 });
 $('#timer-plus').addEventListener('click', () => {
   if (state.timerSeconds < 180) {
     state.timerSeconds += 15;
     $('#timer-num').textContent = state.timerSeconds;
-    SFX.tap();
+    SFX.tap(); haptic(15);
   }
 });
 
@@ -317,7 +324,7 @@ function buildPoolAndStart() {
   state.scores = {};
   state.players.forEach(p => state.scores[p] = 0);
 
-  SFX.roundStart();
+  SFX.roundStart(); haptic(30);
   startTurn();
 }
 
@@ -383,7 +390,7 @@ function addSubmitPrompt() {
   input.value = '';
   cycleSubmitPlaceholder();
   input.focus();
-  SFX.tap();
+  SFX.tap(); haptic(15);
   renderSubmittedPrompts();
   updateSubmitButton();
 }
@@ -451,7 +458,7 @@ function startTurn() {
 }
 
 $('#ready-btn').addEventListener('click', () => {
-  SFX.select();
+  SFX.select(); haptic(30);
   showPickPrompt();
 });
 
@@ -483,7 +490,7 @@ function showPickPrompt() {
     $$('.prompt-pick-option').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     $('#pick-prompt-btn').disabled = false;
-    SFX.tap();
+    SFX.tap(); haptic(15);
   };
 
   $('#pick-prompt-btn').disabled = true;
@@ -500,7 +507,7 @@ $('#pick-prompt-btn').addEventListener('click', () => {
   const decoyPool = state.promptPool.filter(p => p.text !== state.currentPrompt);
   state.decoyPrompts = shuffle(decoyPool).slice(0, 3).map(p => p.text);
 
-  SFX.select();
+  SFX.select(); haptic(30);
   showSecretRanking();
 });
 
@@ -570,7 +577,7 @@ function handleDrop(e) {
   if (dragIndex !== null && dragIndex !== dropIndex) {
     const [moved] = state.currentRanking.splice(dragIndex, 1);
     state.currentRanking.splice(dropIndex, 0, moved);
-    SFX.tap();
+    SFX.tap(); haptic(15);
     renderRankList();
   }
 }
@@ -615,7 +622,7 @@ function handleTouchEnd(e) {
         const [moved] = state.currentRanking.splice(dragIndex, 1);
         if (dropIndex > dragIndex) dropIndex--;
         state.currentRanking.splice(dropIndex, 0, moved);
-        SFX.tap();
+        SFX.tap(); haptic(15);
         renderRankList();
       }
       break;
@@ -633,7 +640,7 @@ $('#confirm-ranking-btn').addEventListener('click', () => {
   state.guesses = {};
   state.roundScores = {};
   state.players.forEach(p => state.roundScores[p] = 0);
-  SFX.select();
+  SFX.select(); haptic(30);
   showGuessScreen();
 });
 
@@ -688,7 +695,7 @@ function showGuessScreen() {
     guessLocked = true;
     btn.classList.add('locked');
     optionsEl.classList.add('locked');
-    SFX.select();
+    SFX.select(); haptic(30);
 
     const nextUn = guessers.find(g => !state.guesses[g] && g !== currentGuesser);
     const allGuessed = guessers.every(g => state.guesses[g]);
@@ -759,7 +766,8 @@ $('#submit-guesses-btn').addEventListener('click', () => {
     state.scores[creator] = (state.scores[creator] || 0) + 50;
   }
 
-  if (correctCount > 0) SFX.correct(); else SFX.wrong();
+  if (correctCount > 0) { SFX.correct(); haptic([50, 30, 100]); }
+  else { SFX.wrong(); haptic(200); }
   showResults(correctCount, guessers.length);
 });
 
@@ -853,7 +861,7 @@ function showGameOver() {
   }
 
   renderTotalScores('#final-scores');
-  SFX.victory();
+  SFX.victory(); haptic([50, 50, 50, 50]);
   showScreen('gameover');
 }
 
