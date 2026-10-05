@@ -1052,6 +1052,32 @@ $('#submit-votes-btn').addEventListener('click', () => {
   showFinalGameOver({ text: best.text, creator: best.creator, votes: bestCount });
 });
 
+// ============================================================
+//  SHARE RESULTS
+// ============================================================
+$('#share-results-btn').addEventListener('click', () => {
+  const sorted = [...state.players].sort((a, b) => (state.scores[b] || 0) - (state.scores[a] || 0));
+  const lines = ['Rank & Guess - Final Scores', ''];
+  sorted.forEach((name, i) => {
+    const medal = i === 0 ? '1st' : i === 1 ? '2nd' : i === 2 ? '3rd' : `${i + 1}th`;
+    lines.push(`${medal}: ${name} - ${state.scores[name] || 0} pts`);
+  });
+  lines.push('', 'Play at: https://djsaunders1997.github.io/id-game/');
+
+  const text = lines.join('\n');
+
+  if (navigator.share) {
+    navigator.share({ title: 'Rank & Guess Results', text }).catch(() => {});
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = $('#share-results-btn');
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Share Results'; }, 2000);
+    }).catch(() => {});
+  }
+  SFX.tap(); haptic(15);
+});
+
 $('#play-again-btn').addEventListener('click', () => {
   state.currentRound = 1;
   state.currentTurnInRound = 0;
