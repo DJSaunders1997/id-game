@@ -37,6 +37,7 @@ let state = {
   promptPool: [],
   submitPlayerIndex: 0,
   playerSubmittedThisRound: [],
+  streaks: {},
 };
 
 // ============================================================
@@ -377,7 +378,8 @@ function buildPoolAndStart() {
   state.currentTurnInRound = 0;
   state.rankerIndex = 0;
   state.scores = {};
-  state.players.forEach(p => state.scores[p] = 0);
+  state.streaks = {};
+  state.players.forEach(p => { state.scores[p] = 0; state.streaks[p] = 0; });
 
   SFX.roundStart(); haptic(30);
   startTurn();
@@ -808,9 +810,14 @@ $('#submit-guesses-btn').addEventListener('click', () => {
   let correctCount = 0;
   guessers.forEach(name => {
     if (state.guesses[name] === state.currentPrompt) {
-      state.roundScores[name] = 100;
-      state.scores[name] = (state.scores[name] || 0) + 100;
+      state.streaks[name] = (state.streaks[name] || 0) + 1;
+      const streakBonus = (state.streaks[name] - 1) * 50;
+      const pts = 100 + streakBonus;
+      state.roundScores[name] = pts;
+      state.scores[name] = (state.scores[name] || 0) + pts;
       correctCount++;
+    } else {
+      state.streaks[name] = 0;
     }
   });
 
@@ -852,11 +859,13 @@ function showResults(correctCount, totalGuessers) {
     const guessedRight = state.guesses[name] === state.currentPrompt;
     const isCreator = creator && name === creator;
     const pts = state.roundScores[name] || 0;
+    const streak = state.streaks[name] || 0;
     let label = '';
     if (guessedRight && isCreator) label = '&#10003; + prompt bonus';
     else if (guessedRight) label = '&#10003;';
     else if (isCreator) label = 'prompt bonus';
     else label = '&#10007;';
+    if (streak >= 2) label += ` (${streak}x streak!)`;
     return `<div class="score-row">
       <span class="score-name">${name} ${label}</span>
       <span class="score-value">+${pts}</span>
@@ -928,7 +937,8 @@ $('#play-again-btn').addEventListener('click', () => {
   state.usedPrompts = [];
   state.currentPromptCreator = null;
   state.scores = {};
-  state.players.forEach(p => state.scores[p] = 0);
+  state.streaks = {};
+  state.players.forEach(p => { state.scores[p] = 0; state.streaks[p] = 0; });
 
   if (state.activeCategories.includes('custom')) {
     state.customPrompts = [];
