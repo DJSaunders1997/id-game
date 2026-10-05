@@ -89,14 +89,37 @@
       <div class="text-dim" style="font-size:0.8rem;">0 = no timer</div>
     </div>
 
-    <details class="scoring-details">
-      <summary class="scoring-summary">How scoring works</summary>
+    <details class="scoring-details card">
+      <summary class="scoring-summary">
+        <span class="scoring-summary-text">How scoring works</span>
+        <span class="scoring-chevron"></span>
+      </summary>
       <div class="scoring-body">
-        <div class="scoring-row"><span>Correct guess</span><span class="scoring-pts">+100</span></div>
-        <div class="scoring-row"><span>Streak bonus (2nd+ in a row)</span><span class="scoring-pts">+50 per streak</span></div>
-        <div class="scoring-row"><span>Speed bonus (faster = more)</span><span class="scoring-pts">up to +50</span></div>
-        <div class="scoring-row"><span>Ranker bonus (per correct guess)</span><span class="scoring-pts">+25 each</span></div>
-        <div class="scoring-row"><span>Your prompt gets picked</span><span class="scoring-pts">+50</span></div>
+        <div class="scoring-row">
+          <span class="scoring-icon">🎯</span>
+          <span class="scoring-label">Correct guess</span>
+          <span class="scoring-pts">+100</span>
+        </div>
+        <div class="scoring-row">
+          <span class="scoring-icon">🔥</span>
+          <span class="scoring-label">Streak bonus<span class="scoring-hint">2nd+ correct in a row</span></span>
+          <span class="scoring-pts">+50/streak</span>
+        </div>
+        <div class="scoring-row">
+          <span class="scoring-icon">⚡</span>
+          <span class="scoring-label">Speed bonus<span class="scoring-hint">Faster guess = more points</span></span>
+          <span class="scoring-pts">up to +50</span>
+        </div>
+        <div class="scoring-row">
+          <span class="scoring-icon">👑</span>
+          <span class="scoring-label">Ranker bonus<span class="scoring-hint">Per person who guesses right</span></span>
+          <span class="scoring-pts">+25 each</span>
+        </div>
+        <div class="scoring-row">
+          <span class="scoring-icon">✏️</span>
+          <span class="scoring-label">Prompt picked<span class="scoring-hint">Your custom prompt gets chosen</span></span>
+          <span class="scoring-pts">+50</span>
+        </div>
       </div>
     </details>
 
