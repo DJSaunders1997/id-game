@@ -919,6 +919,13 @@ $('#submit-guesses-btn').addEventListener('click', () => {
     }
   });
 
+  // Ranker bonus: +25 per correct guess
+  if (correctCount > 0) {
+    const rankerBonus = correctCount * 25;
+    state.roundScores[ranker] = (state.roundScores[ranker] || 0) + rankerBonus;
+    state.scores[ranker] = (state.scores[ranker] || 0) + rankerBonus;
+  }
+
   // Creator bonus: +50 if a custom prompt was picked
   const creator = state.currentPromptCreator;
   if (creator && state.players.includes(creator) && creator !== ranker) {
@@ -972,10 +979,13 @@ function showResults(correctCount, totalGuessers) {
       <span class="score-name">${name} ${label}</span>
       <span class="score-value">+${pts}</span>
     </div>`;
-  }).join('') +
-  `<div class="score-row ranker">
-    <span class="score-name">${ranker}</span>
-    <span class="score-value">-</span>
+  }).join('');
+
+  const rankerPts = state.roundScores[ranker] || 0;
+  const rankerLabel = rankerPts > 0 ? `ranked well!` : 'ranker';
+  roundScoresEl.innerHTML += `<div class="score-row ranker${rankerPts > 0 ? ' scored' : ''}">
+    <span class="score-name">${ranker} <span style="font-weight:400;font-size:0.8rem;color:var(--text-dim)">${rankerLabel}</span></span>
+    <span class="score-value">${rankerPts > 0 ? '+' + rankerPts : '-'}</span>
   </div>`;
 
   renderTotalScores('#total-scores');

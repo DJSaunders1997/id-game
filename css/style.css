@@ -383,13 +383,8 @@ textarea {
   font-size: 1.2rem;
   color: var(--accent);
 }
-.score-row.ranker { opacity: 0.6; }
-.score-row.ranker .score-value::after {
-  content: " (ranker)";
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--text-dim);
-}
+.score-row.ranker { opacity: 0.5; }
+.score-row.ranker.scored { opacity: 1; }
 
 /* ---- Round info bar ---- */
 .round-info {
