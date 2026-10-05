@@ -182,8 +182,8 @@ function renderPlayers() {
   ).join('');
 
   const count = state.players.length;
-  if (count < 2) {
-    playerCountEl.textContent = `Add at least ${2 - count} more player${2 - count > 1 ? 's' : ''}`;
+  if (count < 3) {
+    playerCountEl.textContent = `Add at least ${3 - count} more player${3 - count > 1 ? 's' : ''}`;
     startBtn.disabled = true;
   } else {
     playerCountEl.textContent = `${count} players ready`;
@@ -221,14 +221,15 @@ function initCategoryToggles() {
   container.innerHTML = Object.entries(PACK_INFO).map(([key, info]) => {
     const isActive = key === 'standard' ? ' active' : '';
     const nsfwClass = key === 'nsfw' ? ' nsfw' : '';
-    return `<button class="cat-toggle${nsfwClass}${isActive}" data-cat="${key}" title="${info.description}">
-      ${info.emoji} ${info.label}
-    </button>`;
+    return `<div class="pack-card${nsfwClass}${isActive}" data-cat="${key}">
+      <div class="pack-header">${info.emoji} ${info.label}</div>
+      <div class="pack-desc">${info.description}</div>
+    </div>`;
   }).join('');
 
-  container.querySelectorAll('.cat-toggle').forEach(btn => {
-    btn.addEventListener('click', () => {
-      btn.classList.toggle('active');
+  container.querySelectorAll('.pack-card').forEach(card => {
+    card.addEventListener('click', () => {
+      card.classList.toggle('active');
       SFX.tap(); haptic(15);
       updateActiveCategories();
     });
@@ -236,7 +237,7 @@ function initCategoryToggles() {
 }
 
 function updateActiveCategories() {
-  state.activeCategories = Array.from($$('.cat-toggle.active')).map(b => b.dataset.cat);
+  state.activeCategories = Array.from($$('.pack-card.active')).map(b => b.dataset.cat);
   const showCustom = state.activeCategories.includes('custom');
   $('#custom-prompts-section').style.display = showCustom ? 'block' : 'none';
   updatePoolInfo();
@@ -667,6 +668,7 @@ function handleTouchMove(e) {
   const items = Array.from($$('#rank-list .rank-item'));
   items.forEach(el => el.classList.remove('drop-target-above', 'drop-target-below'));
   for (const item of items) {
+    if (+item.dataset.index === dragIndex) continue;
     const rect = item.getBoundingClientRect();
     const midY = rect.top + rect.height / 2;
     if (touchY >= rect.top && touchY <= rect.bottom) {
@@ -759,17 +761,22 @@ function showGuessScreen() {
     if (tab) tab.classList.add('guessed');
     updateGuessUI(currentGuesser);
 
-    // Lock inputs briefly and animate
     guessLocked = true;
     btn.classList.add('locked');
     optionsEl.classList.add('locked');
-    SFX.select(); haptic(30);
+    SFX.swoosh(); haptic(30);
 
     const nextUn = guessers.find(g => !state.guesses[g] && g !== currentGuesser);
     const allGuessed = guessers.every(g => state.guesses[g]);
     $('#submit-guesses-btn').disabled = !allGuessed;
 
+    // Show "Guess submitted" overlay
+    const overlay = document.getElementById('guess-overlay');
+    overlay.querySelector('.overlay-name').textContent = currentGuesser;
+    overlay.classList.add('visible');
+
     setTimeout(() => {
+      overlay.classList.remove('visible');
       btn.classList.remove('locked');
       optionsEl.classList.remove('locked');
       guessLocked = false;
@@ -780,7 +787,7 @@ function showGuessScreen() {
         tabsEl.querySelector(`[data-guesser="${nextUn}"]`).classList.add('active');
         updateGuessUI(nextUn);
       }
-    }, 800);
+    }, 1200);
   };
 
   showScreen('guess');
@@ -1105,7 +1112,7 @@ $('#new-game-btn').addEventListener('click', () => {
   state.submitPlayerIndex = 0;
   state.currentPromptCreator = null;
   state.activeCategories = ['standard'];
-  $$('.cat-toggle').forEach(b => {
+  $$('.pack-card').forEach(b => {
     b.classList.toggle('active', b.dataset.cat === 'standard');
   });
   $('#rounds-num').textContent = '2';

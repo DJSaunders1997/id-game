@@ -17,6 +17,13 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+<div id="guess-overlay" class="guess-overlay">
+  <div class="overlay-content">
+    <div class="overlay-check">&#10003;</div>
+    <div class="overlay-text">Guess locked in!</div>
+    <div class="overlay-name"></div>
+  </div>
+</div>
 <canvas id="confetti-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;display:none;"></canvas>
 <div class="app">
 
@@ -34,7 +41,7 @@
         <button class="btn btn-primary btn-small" id="add-player-btn">Add</button>
       </div>
       <div id="player-list" class="player-list"></div>
-      <div class="text-dim" style="font-size:0.85rem" id="player-count">Add at least 2 players</div>
+      <div class="text-dim" style="font-size:0.85rem" id="player-count">Add at least 3 players</div>
     </div>
 
     <div class="card">

@@ -121,6 +121,25 @@ const SFX = (() => {
       });
     },
 
+    swoosh() {
+      play(c => {
+        const o = c.createOscillator();
+        const g = c.createGain();
+        const f = c.createBiquadFilter();
+        f.type = 'bandpass';
+        f.frequency.setValueAtTime(2000, c.currentTime);
+        f.frequency.exponentialRampToValueAtTime(400, c.currentTime + 0.25);
+        f.Q.value = 0.5;
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(600, c.currentTime);
+        o.frequency.exponentialRampToValueAtTime(200, c.currentTime + 0.2);
+        g.gain.setValueAtTime(0.12, c.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.25);
+        o.connect(f).connect(g).connect(c.destination);
+        o.start(); o.stop(c.currentTime + 0.25);
+      });
+    },
+
     roundStart() {
       play(c => {
         const o = c.createOscillator();
