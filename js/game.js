@@ -24,12 +24,12 @@ let state = {
   totalRounds: 2,               // 1 round = everyone ranks once
   timerSeconds: 120,
   playMode: 'digital',          // 'digital' or 'physical'
-  // Physical cards settings
-  physicalPickCount: 5,         // how many prompts the ranker picks from
-  physicalGuessCount: 4,        // how many options each guesser sees (1 correct + N-1 decoys)
-  physicalCardReplace: 'used',  // 'used' = only remove picked card, 'all' = replace all shown cards
-  physicalShowRanking: false,   // whether to show the ranking on guess screen (physical = no ranking on phone)
-  physicalRankerGuesses: true,  // ranker enters guesses for all players (keeps phone)
+  pickCount: 5,                 // how many prompts the ranker picks from
+  guessOptionCount: 4,          // how many options each guesser sees (1 correct + N-1 decoys)
+  cardReplace: 'used',          // 'used' = only remove picked card, 'all' = replace all shown cards
+  // Physical mode only
+  showRankingOnPhone: false,    // show ranking on guess screen in physical mode
+  rankerEntersGuesses: true,    // ranker enters guesses for all players (keeps phone)
   currentRound: 0,
   currentTurnInRound: 0,
   rankerIndex: 0,
@@ -419,31 +419,31 @@ $('#mode-toggle').addEventListener('click', (e) => {
 
 // ---- Physical cards settings ----
 $('#pick-count-minus').addEventListener('click', () => {
-  if (state.physicalPickCount > 2) {
-    state.physicalPickCount--;
-    $('#pick-count-num').textContent = state.physicalPickCount;
+  if (state.pickCount > 2) {
+    state.pickCount--;
+    $('#pick-count-num').textContent = state.pickCount;
     SFX.tap(); haptic(15);
   }
 });
 $('#pick-count-plus').addEventListener('click', () => {
-  if (state.physicalPickCount < 10) {
-    state.physicalPickCount++;
-    $('#pick-count-num').textContent = state.physicalPickCount;
+  if (state.pickCount < 10) {
+    state.pickCount++;
+    $('#pick-count-num').textContent = state.pickCount;
     SFX.tap(); haptic(15);
   }
 });
 
 $('#guess-count-minus').addEventListener('click', () => {
-  if (state.physicalGuessCount > 2) {
-    state.physicalGuessCount--;
-    $('#guess-count-num').textContent = state.physicalGuessCount;
+  if (state.guessOptionCount > 2) {
+    state.guessOptionCount--;
+    $('#guess-count-num').textContent = state.guessOptionCount;
     SFX.tap(); haptic(15);
   }
 });
 $('#guess-count-plus').addEventListener('click', () => {
-  if (state.physicalGuessCount < 8) {
-    state.physicalGuessCount++;
-    $('#guess-count-num').textContent = state.physicalGuessCount;
+  if (state.guessOptionCount < 8) {
+    state.guessOptionCount++;
+    $('#guess-count-num').textContent = state.guessOptionCount;
     SFX.tap(); haptic(15);
   }
 });
@@ -451,7 +451,7 @@ $('#guess-count-plus').addEventListener('click', () => {
 $('#replace-toggle').addEventListener('click', (e) => {
   const btn = e.target.closest('.mode-btn');
   if (!btn) return;
-  state.physicalCardReplace = btn.dataset.replace;
+  state.cardReplace = btn.dataset.replace;
   $$('#replace-toggle .mode-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   SFX.tap(); haptic(15);
@@ -460,7 +460,7 @@ $('#replace-toggle').addEventListener('click', (e) => {
 $('#show-ranking-toggle').addEventListener('click', (e) => {
   const btn = e.target.closest('.mode-btn');
   if (!btn) return;
-  state.physicalShowRanking = btn.dataset.val === 'true';
+  state.showRankingOnPhone = btn.dataset.val === 'true';
   $$('#show-ranking-toggle .mode-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   SFX.tap(); haptic(15);
@@ -469,7 +469,7 @@ $('#show-ranking-toggle').addEventListener('click', (e) => {
 $('#guesser-entry-toggle').addEventListener('click', (e) => {
   const btn = e.target.closest('.mode-btn');
   if (!btn) return;
-  state.physicalRankerGuesses = btn.dataset.val === 'true';
+  state.rankerEntersGuesses = btn.dataset.val === 'true';
   $$('#guesser-entry-toggle .mode-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   SFX.tap(); haptic(15);
@@ -500,9 +500,7 @@ function buildPoolAndStart() {
     }
   });
 
-  const minPool = state.playMode === 'physical'
-    ? Math.max(state.physicalPickCount, state.physicalGuessCount)
-    : 5;
+  const minPool = Math.max(state.pickCount, state.guessOptionCount);
   if (pool.length < minPool) {
     alert(`Need at least ${minPool} prompts to play. Got ${pool.length}.`);
     return;
@@ -623,7 +621,7 @@ function shuffle(arr) {
 }
 
 function pickPrompts() {
-  const count = state.playMode === 'physical' ? state.physicalPickCount : 5;
+  const count = state.pickCount;
   let available = state.promptPool.filter(p => !state.usedPrompts.includes(p.text));
   if (available.length < count) {
     state.usedPrompts = [];
@@ -652,7 +650,7 @@ function startTurn() {
   $('#pass-player-name').textContent = ranker;
   $('#pass-round-info').textContent = getRoundLabel();
 
-  if (state.playMode === 'physical' && state.physicalRankerGuesses) {
+  if (state.playMode === 'physical' && state.rankerEntersGuesses) {
     instructions[0].textContent = 'Next ranker:';
     instructions[1].textContent = 'They rank with real cards, you enter guesses on the phone';
   } else {
@@ -713,8 +711,7 @@ $('#pick-prompt-btn').addEventListener('click', () => {
   state.currentPromptCreator = pickedPromptObj.creator;
   state.usedPrompts.push(pickedPromptObj.text);
 
-  // In physical mode with 'all' replacement, mark all shown prompts as used
-  if (state.playMode === 'physical' && state.physicalCardReplace === 'all' && state.lastShownPrompts) {
+  if (state.cardReplace === 'all' && state.lastShownPrompts) {
     state.lastShownPrompts.forEach(p => {
       if (!state.usedPrompts.includes(p.text)) state.usedPrompts.push(p.text);
     });
@@ -724,7 +721,7 @@ $('#pick-prompt-btn').addEventListener('click', () => {
     state.usedCustomPrompts.push({ text: pickedPromptObj.text, creator: pickedPromptObj.creator });
   }
 
-  const decoyCount = state.playMode === 'physical' ? state.physicalGuessCount - 1 : 3;
+  const decoyCount = state.guessOptionCount - 1;
   const decoyPool = state.promptPool.filter(p => p.text !== state.currentPrompt);
   state.decoyPrompts = shuffle(decoyPool).slice(0, decoyCount).map(p => p.text);
 
@@ -910,7 +907,7 @@ function showGuessScreen() {
   const ranker = state.players[state.rankerIndex];
   const guessers = state.players.filter(p => p !== ranker);
   const isPhysical = state.playMode === 'physical';
-  const rankerEnters = isPhysical && state.physicalRankerGuesses;
+  const rankerEnters = isPhysical && state.rankerEntersGuesses;
 
   $('#guess-round-label').textContent = getRoundLabel();
   $('#guess-header-text').textContent = rankerEnters
@@ -919,7 +916,7 @@ function showGuessScreen() {
 
   const revealEl = $('#ranking-reveal');
   const rankingSection = revealEl.parentElement;
-  if (isPhysical && !state.physicalShowRanking) {
+  if (isPhysical && !state.showRankingOnPhone) {
     rankingSection.style.display = 'none';
   } else if (state.currentRanking.length > 0) {
     rankingSection.style.display = '';
@@ -1337,11 +1334,11 @@ $('#new-game-btn').addEventListener('click', () => {
   state.currentPromptCreator = null;
   state.activeCategories = ['standard'];
   state.playMode = 'digital';
-  state.physicalPickCount = 5;
-  state.physicalGuessCount = 4;
-  state.physicalCardReplace = 'used';
-  state.physicalShowRanking = false;
-  state.physicalRankerGuesses = true;
+  state.pickCount = 5;
+  state.guessOptionCount = 4;
+  state.cardReplace = 'used';
+  state.showRankingOnPhone = false;
+  state.rankerEntersGuesses = true;
   $$('.pack-card').forEach(b => {
     b.classList.toggle('active', b.dataset.cat === 'standard');
   });
