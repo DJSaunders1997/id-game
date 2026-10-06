@@ -4,26 +4,43 @@ The goal: players join a room from their own phones, see prompts on their own sc
 
 ---
 
-## 1. Peer-to-Peer via WebRTC Data Channels
+## 1. Peer-to-Peer via WebRTC Data Channels (Preferred)
 
 **Effort**: Medium-low  
 **Infra cost**: Free (no server needed)  
-**How it works**: Host player creates a room. Other players scan a QR code or enter a short code that connects them peer-to-peer using WebRTC data channels. The host's browser acts as the "server" - it holds game state and broadcasts updates to all peers.
+**How it works**: One player is the **host** - their browser acts as the game server. It holds all game state and broadcasts updates to connected peers via WebRTC data channels. Other players connect directly to the host, browser-to-browser.
 
-**Room join flow**: Use a free signalling service (e.g. PeerJS cloud server, or a simple Firebase Realtime Database on the free tier) just for the initial handshake. Once connected, all communication is direct browser-to-browser.
+**Room join flow**: Host clicks "Create Room" -> PeerJS generates a peer ID -> we map that to a short 4-letter room code -> other players enter the code (or scan a QR) -> PeerJS's free cloud signalling server brokers the WebRTC handshake -> once connected, all data flows P2P with no server in the middle.
+
+**How the host works**:
+- Host's browser runs the game loop (same logic as current game.js, but sends state updates instead of DOM updates)
+- Host sees the same UI as everyone else, plus a "room code" display
+- If host is also the ranker, they see the ranker screen. If not, they see the guesser screen.
+- All game events (guess submitted, prompt picked, timer tick) go through the host, which validates and broadcasts
+
+**Architecture**:
+```
+Host browser (game state + UI)
+  ├── WebRTC data channel -> Player 2 browser (UI only)
+  ├── WebRTC data channel -> Player 3 browser (UI only)
+  └── WebRTC data channel -> Player 4 browser (UI only)
+```
 
 **Pros**:
 - No backend to build, deploy, or pay for
-- Low latency (direct connections)
-- Works offline after initial connection (local network)
-- Keeps the "no server" philosophy
+- Low latency (direct connections, typically <50ms on same WiFi)
+- Works offline after initial connection (local network play)
+- Keeps the "no server" philosophy of the current app
+- PeerJS handles all the WebRTC complexity (ICE, STUN, signalling)
+- ~50KB library, way lighter than Firebase SDK
+- Perfect for a party game where everyone's in the same room
 
 **Cons**:
-- WebRTC connection setup can be flaky (NAT traversal issues)
-- Host closing their browser kills the game
-- Need a signalling service for the initial handshake (free tier of PeerJS or Firebase works)
-- Harder to debug connection issues
-- Max ~6-8 peers reliably
+- Host closing their browser kills the game (acceptable - they're physically present)
+- WebRTC can be flaky across different networks/NATs (less of an issue when everyone's on the same WiFi at a party)
+- PeerJS's free signalling server could go down (can self-host as fallback)
+- Max ~6-8 reliable peer connections (fine for a party game)
+- No reconnection if a player drops (would need to rejoin)
 
 **Libraries**: PeerJS (~50KB), or raw WebRTC API
 
@@ -77,11 +94,13 @@ The goal: players join a room from their own phones, see prompts on their own sc
 
 ---
 
-## 4. Lightweight WebSocket Server (Node.js on Fly.io / Railway)
+## 4. Lightweight WebSocket Server (Node.js on Azure Container Apps / Fly.io)
 
 **Effort**: Medium-high  
-**Infra cost**: Free tier (Fly.io free, Railway $5/mo credit)  
-**How it works**: A small Node.js/Express server with `ws` or Socket.IO. Rooms are in-memory objects. Clients connect via WebSocket. Server manages all game state and broadcasts to room members.
+**Infra cost**: Free tier (Azure Container Apps free tier, Fly.io free tier)  
+**How it works**: A small Node.js/Express server with `ws` or Socket.IO. Rooms are in-memory objects. Clients connect via WebSocket. Server manages all game state and broadcasts to room members. This is the same pattern GPTeasers uses - static frontend on GitHub Pages, backend on Azure Container Apps.
+
+**Reference**: GPTeasers (../GPTeasers) uses exactly this split - vanilla HTML/JS frontend served statically, Python FastAPI backend on Azure Container Apps with Docker. We'd do the same but with Node.js + WebSockets instead of Python + SSE.
 
 **Pros**:
 - Full control over game logic
@@ -89,14 +108,16 @@ The goal: players join a room from their own phones, see prompts on their own sc
 - Lowest latency of server-based options
 - Clean separation of concerns
 - Socket.IO handles reconnection automatically
+- Proven pattern (GPTeasers uses this architecture)
 
 **Cons**:
 - Need to write, test, deploy, and maintain a backend
 - In-memory rooms = lost on server restart (fine for a party game)
 - Need to handle server deployment and uptime
 - More code to maintain
+- Docker + container setup adds complexity
 
-**Stack**: Node.js + ws/Socket.IO on Fly.io (free tier: 3 shared VMs, 256MB RAM)
+**Stack**: Node.js + ws/Socket.IO on Azure Container Apps (free tier: 2M requests/month) or Fly.io (free tier: 3 shared VMs, 256MB RAM)
 
 ---
 
@@ -122,11 +143,11 @@ The goal: players join a room from their own phones, see prompts on their own sc
 
 ## Recommendation
 
-**Start with option 2 (Firebase)** if you want reliability and speed of development. You can have a working lobby in an afternoon. The SDK size is the main downside but it's a one-time cost.
+**Go with option 1 (PeerJS)**. It fits the app's philosophy - no backend, no accounts, no infrastructure. One player hosts, others join. For a party game where everyone's in the same room on the same WiFi, WebRTC reliability is a non-issue. PeerJS is ~50KB vs Firebase's 100KB+ SDK, and you don't need a Google project or security rules.
 
-**Start with option 1 (WebRTC/PeerJS)** if you want to keep the zero-infrastructure philosophy. PeerJS makes WebRTC manageable. The trade-off is connection reliability - works great on the same WiFi, can be fiddly across networks.
+**Fallback to option 4 (Azure Container Apps)** if WebRTC proves too unreliable across networks. The GPTeasers pattern (static frontend + containerised backend) is proven and the free tier covers a party game easily.
 
-**Avoid options 4-5** unless you plan to scale this beyond a friends party game. The maintenance overhead isn't worth it.
+**Avoid options 3 and 5** - Supabase and serverless are overengineered for this use case.
 
 ---
 
