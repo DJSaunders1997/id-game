@@ -23,6 +23,8 @@ let state = {
   activeCategories: ['standard'],
   totalRounds: 2,               // 1 round = everyone ranks once
   timerSeconds: 120,
+  networkMode: 'local',         // 'local', 'host', 'client'
+  peerMap: {},                  // playerName -> peerId
   playMode: 'digital',          // 'digital' or 'physical'
   pickCount: 5,                 // how many prompts the ranker picks from
   guessOptionCount: 4,          // how many options each guesser sees (1 correct + N-1 decoys)
@@ -600,6 +602,17 @@ $('#submitted-prompts').addEventListener('click', e => {
 });
 
 $('#submit-done-btn').addEventListener('click', () => {
+  // Client mode - send prompts to host
+  if (state.networkMode === 'client') {
+    Network.sendToHost({
+      type: 'submitted-prompts',
+      playerName: Network.myName,
+      prompts: state.playerSubmittedThisRound,
+    });
+    showWaitScreen('Prompts submitted!', 'Waiting for others...', '');
+    return;
+  }
+
   state.submitPlayerIndex++;
   if (state.submitPlayerIndex < state.players.length) {
     showSubmitScreen();
@@ -646,6 +659,13 @@ function startTurn() {
   state.currentTurnInRound++;
   const ranker = state.players[state.rankerIndex];
 
+  if (state.networkMode === 'host') {
+    // In network mode, skip pass screen - send pick prompt directly
+    networkStartPick();
+    return;
+  }
+
+  // Local mode - show pass screen
   const instructions = $$('#screen-pass .pass-device .instruction');
   $('#pass-player-name').textContent = ranker;
   $('#pass-round-info').textContent = getRoundLabel();
@@ -658,6 +678,60 @@ function startTurn() {
     instructions[1].textContent = "They're the ranker this turn";
   }
   showScreen('pass');
+}
+
+function networkStartPick() {
+  const ranker = state.players[state.rankerIndex];
+  const rankerPeerId = state.peerMap[ranker];
+  const options = pickPrompts();
+  state.lastShownPrompts = options;
+  state._pickOptions = options;
+
+  // Tell non-rankers to wait
+  state.players.forEach(name => {
+    if (name === ranker) return;
+    const peerId = state.peerMap[name];
+    if (peerId === 'host') {
+      showWaitScreen(`${ranker} is picking a prompt...`, getRoundLabel(), '');
+    } else {
+      Network.sendTo(peerId, {
+        type: 'wait',
+        message: `${ranker} is picking a prompt...`,
+        detail: getRoundLabel(),
+      });
+    }
+  });
+
+  // Send pick to ranker
+  if (rankerPeerId === 'host') {
+    // Host is the ranker - show pick screen locally
+    pickedPromptObj = null;
+    $('#pick-round-label').textContent = getRoundLabel();
+    $('#pick-ranker-name').textContent = ranker;
+    const optionsEl = $('#prompt-pick-options');
+    optionsEl.innerHTML = options.map((p, i) =>
+      `<button class="prompt-pick-option" data-index="${i}">${p.text}</button>`
+    ).join('');
+    optionsEl.onclick = (e) => {
+      const btn = e.target.closest('.prompt-pick-option');
+      if (!btn) return;
+      pickedPromptObj = options[+btn.dataset.index];
+      $$('.prompt-pick-option').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      $('#pick-prompt-btn').disabled = false;
+      SFX.tap(); haptic(15);
+    };
+    $('#pick-hint-text').textContent = "Pick the one you like best!";
+    $('#pick-prompt-btn').disabled = true;
+    showScreen('pick');
+  } else {
+    Network.sendTo(rankerPeerId, {
+      type: 'pick-prompt',
+      options: options.map(p => p.text),
+      roundLabel: getRoundLabel(),
+    });
+    showWaitScreen(`${ranker} is picking a prompt...`, getRoundLabel(), '');
+  }
 }
 
 $('#ready-btn').addEventListener('click', () => {
@@ -705,6 +779,15 @@ function showPickPrompt() {
 }
 
 $('#pick-prompt-btn').addEventListener('click', () => {
+  // Client mode - send pick to host
+  if (state.networkMode === 'client' && $('#pick-prompt-btn')._networkPick) {
+    const idx = $('#pick-prompt-btn')._networkPick();
+    if (idx == null) return;
+    Network.sendToHost({ type: 'picked-prompt', index: idx });
+    showWaitScreen('Ranking time...', '', '');
+    return;
+  }
+
   if (!pickedPromptObj) return;
 
   state.currentPrompt = pickedPromptObj.text;
@@ -727,13 +810,64 @@ $('#pick-prompt-btn').addEventListener('click', () => {
 
   SFX.select(); haptic(30);
 
-  if (state.playMode === 'physical') {
+  if (state.networkMode === 'host') {
+    networkAfterPick();
+  } else if (state.playMode === 'physical') {
     state.currentRanking = [];
     showSortScreen();
   } else {
     showSecretRanking();
   }
 });
+
+function networkAfterPick() {
+  const ranker = state.players[state.rankerIndex];
+  const rankerPeerId = state.peerMap[ranker];
+  const others = state.players.filter(p => p !== ranker);
+
+  // Tell non-rankers to wait
+  others.forEach(name => {
+    const peerId = state.peerMap[name];
+    const waitMsg = {
+      type: 'wait',
+      message: `${ranker} is ranking...`,
+      detail: state.currentPrompt ? '' : '',
+    };
+    if (peerId === 'host') {
+      showWaitScreen(waitMsg.message, '', '');
+    } else {
+      Network.sendTo(peerId, waitMsg);
+    }
+  });
+
+  if (state.playMode === 'physical') {
+    state.currentRanking = [];
+    // Send sort screen to ranker
+    if (rankerPeerId === 'host') {
+      showSortScreen();
+    } else {
+      Network.sendTo(rankerPeerId, {
+        type: 'sort-cards',
+        prompt: state.currentPrompt,
+        roundLabel: getRoundLabel(),
+        timerSeconds: state.timerSeconds,
+      });
+    }
+  } else {
+    // Send secret ranking screen to ranker
+    if (rankerPeerId === 'host') {
+      showSecretRanking();
+    } else {
+      Network.sendTo(rankerPeerId, {
+        type: 'secret-ranking',
+        prompt: state.currentPrompt,
+        players: others,
+        roundLabel: getRoundLabel(),
+        timerSeconds: state.timerSeconds,
+      });
+    }
+  }
+}
 
 // ============================================================
 //  SORT CARDS SCREEN (physical mode)
@@ -758,6 +892,15 @@ function showSortScreen() {
 
 $('#sort-done-btn').addEventListener('click', () => {
   stopTimer();
+
+  // Client mode - tell host sorting is done
+  if (state.networkMode === 'client') {
+    Network.sendToHost({ type: 'sort-done' });
+    SFX.select(); haptic(30);
+    showWaitScreen('Cards sorted!', 'Waiting for guesses...', '');
+    return;
+  }
+
   state.guesses = {};
   state.guessTimestamps = {};
   state.roundScores = {};
@@ -922,6 +1065,15 @@ function onSortStart(e) {
 // ============================================================
 $('#confirm-ranking-btn').addEventListener('click', () => {
   stopTimer();
+
+  // Client mode - send ranking to host
+  if (state.networkMode === 'client') {
+    Network.sendToHost({ type: 'confirmed-ranking', ranking: state.currentRanking });
+    SFX.select(); haptic(30);
+    showWaitScreen('Ranking submitted!', 'Waiting for guesses...', '');
+    return;
+  }
+
   state.guesses = {};
   state.guessTimestamps = {};
   state.roundScores = {};
@@ -935,6 +1087,11 @@ function showGuessScreen() {
   const guessers = state.players.filter(p => p !== ranker);
   const isPhysical = state.playMode === 'physical';
   const rankerEnters = isPhysical && state.rankerEntersGuesses;
+
+  if (state.networkMode === 'host') {
+    networkShowGuessScreen(ranker, guessers);
+    return;
+  }
 
   $('#guess-round-label').textContent = getRoundLabel();
   $('#guess-header-text').textContent = rankerEnters
@@ -1041,6 +1198,56 @@ function showGuessScreen() {
         }
       });
       $('#submit-guesses-btn').click();
+    }
+  );
+}
+
+function networkShowGuessScreen(ranker, guessers) {
+  const options = shuffle([state.currentPrompt, ...state.decoyPrompts]);
+  const ranking = state.currentRanking;
+
+  // Send guess screen to each guesser
+  guessers.forEach(name => {
+    const peerId = state.peerMap[name];
+    const guessMsg = {
+      type: 'guess',
+      options,
+      ranking: ranking.length > 0 ? ranking : null,
+      roundLabel: getRoundLabel(),
+    };
+    if (peerId === 'host') {
+      clientShowGuessScreen(guessMsg);
+    } else {
+      Network.sendTo(peerId, guessMsg);
+    }
+  });
+
+  // Ranker waits (or sees a dashboard on host)
+  const rankerPeerId = state.peerMap[ranker];
+  if (rankerPeerId === 'host') {
+    // Host is ranker - show waiting screen with guess progress
+    showWaitScreen('Waiting for guesses...', getRoundLabel(), '');
+  } else {
+    Network.sendTo(rankerPeerId, {
+      type: 'wait',
+      message: 'Waiting for everyone to guess...',
+      detail: getRoundLabel(),
+    });
+  }
+
+  // Start timer on host
+  startTimer(
+    state.timerSeconds,
+    $('#guess-timer-fill') || document.createElement('div'),
+    $('#guess-timer-text') || document.createElement('span'),
+    $('#guess-timer') || document.createElement('div'),
+    () => {
+      guessers.forEach(g => {
+        if (!state.guesses[g]) {
+          state.guesses[g] = options[Math.floor(Math.random() * options.length)];
+        }
+      });
+      networkShowResults();
     }
   );
 }
@@ -1168,6 +1375,123 @@ function renderTotalScores(selector) {
       <span class="score-value">${state.scores[name] || 0}</span>
     </div>`
   ).join('');
+}
+
+function networkShowResults() {
+  stopTimer();
+  const ranker = state.players[state.rankerIndex];
+  const guessers = state.players.filter(p => p !== ranker);
+
+  // Calculate scores (same logic as submit-guesses handler)
+  let correctCount = 0;
+  guessers.forEach(name => {
+    if (state.guesses[name] === state.currentPrompt) {
+      state.streaks[name] = (state.streaks[name] || 0) + 1;
+      const streakBonus = (state.streaks[name] - 1) * 50;
+      let speedBonus = 0;
+      if (state.timerSeconds > 0 && state.guessTimestamps[name] != null) {
+        speedBonus = Math.round((state.guessTimestamps[name] / state.timerSeconds) * 50);
+      }
+      const pts = 100 + streakBonus + speedBonus;
+      state.roundScores[name] = pts;
+      state.scores[name] = (state.scores[name] || 0) + pts;
+      correctCount++;
+    } else {
+      state.streaks[name] = 0;
+    }
+  });
+
+  if (correctCount > 0) {
+    const rankerBonus = correctCount * 25;
+    state.roundScores[ranker] = (state.roundScores[ranker] || 0) + rankerBonus;
+    state.scores[ranker] = (state.scores[ranker] || 0) + rankerBonus;
+  }
+
+  const creator = state.currentPromptCreator;
+  if (creator && state.players.includes(creator) && creator !== ranker) {
+    state.roundScores[creator] = (state.roundScores[creator] || 0) + 50;
+    state.scores[creator] = (state.scores[creator] || 0) + 50;
+  }
+
+  const isLastTurn = state.currentRound >= state.totalRounds && state.currentTurnInRound >= state.players.length;
+
+  // Build result data
+  let bannerText, bannerClass;
+  if (correctCount === 0) {
+    bannerClass = 'result-banner wrong-banner';
+    bannerText = 'Nobody got it right!';
+  } else if (correctCount === guessers.length) {
+    bannerClass = 'result-banner correct-banner';
+    bannerText = 'Everyone got it!';
+  } else {
+    bannerClass = 'result-banner correct-banner';
+    bannerText = `${correctCount}/${guessers.length} guessed correctly!`;
+  }
+
+  const promptHtml = state.currentPrompt +
+    (state.currentPromptCreator ? `<div class="creator-bonus" style="margin-top:6px;">Written by ${state.currentPromptCreator} (+50 bonus!)</div>` : '');
+
+  const roundScoresHtml = guessers.map(name => {
+    const guessedRight = state.guesses[name] === state.currentPrompt;
+    const pts = state.roundScores[name] || 0;
+    let label = guessedRight ? '&#10003;' : '&#10007;';
+    return `<div class="score-row">
+      <span class="score-name">${name} ${label}</span>
+      <span class="score-value">+${pts}</span>
+    </div>`;
+  }).join('') + `<div class="score-row ranker">
+    <span class="score-name">${ranker} <span style="font-weight:400;font-size:0.8rem;color:var(--text-dim)">${state.roundScores[ranker] > 0 ? 'ranked well!' : 'ranker'}</span></span>
+    <span class="score-value">${state.roundScores[ranker] > 0 ? '+' + state.roundScores[ranker] : '-'}</span>
+  </div>`;
+
+  const resultMsg = {
+    type: 'result',
+    roundLabel: getRoundLabel(),
+    promptHtml,
+    bannerClass,
+    bannerText,
+    roundScoresHtml,
+    scores: { ...state.scores },
+    correctCount,
+    isLastTurn,
+  };
+
+  // Send to all clients
+  Network.broadcast(resultMsg);
+
+  // Show on host too
+  showResults(correctCount, guessers.length);
+
+  // Auto-advance after 8 seconds
+  setTimeout(() => {
+    if (isLastTurn) {
+      networkShowGameOver();
+    } else {
+      state.rankerIndex = (state.rankerIndex + 1) % state.players.length;
+      if (state.currentTurnInRound >= state.players.length) {
+        state.currentRound++;
+        state.currentTurnInRound = 0;
+      }
+      startTurn();
+    }
+  }, 8000);
+}
+
+function networkShowGameOver() {
+  // Skip vote for network mode MVP
+  const sorted = [...state.players].sort((a, b) => (state.scores[b] || 0) - (state.scores[a] || 0));
+  const topScore = state.scores[sorted[0]] || 0;
+  const winners = sorted.filter(p => (state.scores[p] || 0) === topScore);
+  const winnerText = winners.length === 1 ? `${winners[0]} wins!` : `It's a tie! ${winners.join(' & ')}`;
+
+  Network.broadcast({
+    type: 'gameover',
+    winnerText,
+    scores: { ...state.scores },
+    bestPromptHtml: '',
+  });
+
+  showFinalGameOver(null);
 }
 
 // ============================================================
@@ -1355,6 +1679,23 @@ $('#play-again-btn').addEventListener('click', () => {
 });
 
 $('#new-game-btn').addEventListener('click', () => {
+  if (state.networkMode !== 'local') {
+    Network.destroy();
+    state.networkMode = 'local';
+    state.peerMap = {};
+    // Reset lobby UI
+    $('#lobby-menu').style.display = '';
+    $('#lobby-room-info').style.display = 'none';
+    $('#lobby-host-actions').style.display = 'none';
+    $('#lobby-client-wait').style.display = 'none';
+    $('#host-game-btn').disabled = false;
+    $('#host-game-btn').textContent = 'Host Game';
+    $('#join-game-btn').disabled = false;
+    $('#join-game-btn').textContent = 'Join';
+    showScreen('lobby');
+    return;
+  }
+
   state.customPrompts = [];
   state.totalRounds = 2;
   state.submitPlayerIndex = 0;
@@ -1393,3 +1734,511 @@ initCategoryToggles();
 renderPlayers();
 renderCustomPrompts();
 updateActiveCategories();
+
+// ============================================================
+//  LOBBY (online multiplayer)
+// ============================================================
+function showWaitScreen(message, detail, sub) {
+  $('#wait-message').textContent = message || 'Waiting...';
+  $('#wait-detail').textContent = detail || '';
+  $('#wait-sub').textContent = sub || '';
+  showScreen('wait');
+}
+
+function renderLobbyPlayers() {
+  const players = Network.getPlayerList();
+  const el = $('#lobby-player-list');
+  el.innerHTML = players.map(p =>
+    `<div class="player-chip">${p.name}${p.peerId === 'host' ? ' (host)' : ''}</div>`
+  ).join('');
+  $('#lobby-status').textContent = `${players.length} player${players.length !== 1 ? 's' : ''} connected`;
+
+  if (Network.isHost) {
+    const btn = $('#lobby-start-btn');
+    if (players.length >= 3) {
+      btn.disabled = false;
+      btn.textContent = 'Start Game';
+    } else {
+      btn.disabled = true;
+      btn.textContent = `Start Game (need ${3 - players.length} more)`;
+    }
+  }
+}
+
+$('#play-local-btn').addEventListener('click', () => {
+  state.networkMode = 'local';
+  SFX.tap(); haptic(15);
+  showScreen('home');
+});
+
+$('#host-game-btn').addEventListener('click', async () => {
+  const name = $('#lobby-name-input').value.trim();
+  if (!name) { $('#lobby-name-input').focus(); return; }
+
+  SFX.tap(); haptic(15);
+  $('#host-game-btn').disabled = true;
+  $('#host-game-btn').textContent = 'Creating...';
+
+  try {
+    const code = await Network.createRoom(name);
+    state.networkMode = 'host';
+
+    $('#lobby-menu').style.display = 'none';
+    $('#lobby-room-info').style.display = 'block';
+    $('#lobby-host-actions').style.display = 'block';
+    $('#lobby-room-code').textContent = code;
+
+    Network.on('player-join', (peerId, playerName) => {
+      SFX.tap(); haptic(15);
+      renderLobbyPlayers();
+      Network.broadcast({ type: 'lobby-update', players: Network.getPlayerList().map(p => p.name) });
+    });
+
+    Network.on('player-leave', () => {
+      renderLobbyPlayers();
+      Network.broadcast({ type: 'lobby-update', players: Network.getPlayerList().map(p => p.name) });
+    });
+
+    Network.on('message', hostHandleMessage);
+
+    renderLobbyPlayers();
+  } catch (err) {
+    alert('Failed to create room: ' + err.message);
+    $('#host-game-btn').disabled = false;
+    $('#host-game-btn').textContent = 'Host Game';
+  }
+});
+
+$('#join-game-btn').addEventListener('click', async () => {
+  const name = $('#lobby-name-input').value.trim();
+  const code = $('#room-code-input').value.trim().toUpperCase();
+  if (!name) { $('#lobby-name-input').focus(); return; }
+  if (!code || code.length !== 4) { $('#room-code-input').focus(); return; }
+
+  SFX.tap(); haptic(15);
+  $('#join-game-btn').disabled = true;
+  $('#join-game-btn').textContent = '...';
+
+  try {
+    await Network.joinRoom(code, name);
+    state.networkMode = 'client';
+
+    $('#lobby-menu').style.display = 'none';
+    $('#lobby-room-info').style.display = 'block';
+    $('#lobby-client-wait').style.display = 'block';
+    $('#lobby-room-code').textContent = code;
+    $('#lobby-player-list').innerHTML = `<div class="player-chip">${name} (you)</div>`;
+    $('#lobby-status').textContent = 'Connected! Waiting for host...';
+
+    Network.on('message', clientHandleMessage);
+  } catch (err) {
+    alert('Failed to join: ' + err.message);
+    $('#join-game-btn').disabled = false;
+    $('#join-game-btn').textContent = 'Join';
+  }
+});
+
+$('#lobby-start-btn').addEventListener('click', () => {
+  if (!Network.isHost) return;
+  const players = Network.getPlayerList();
+  if (players.length < 3) return;
+
+  state.players = players.map(p => p.name);
+  state.peerMap = {};
+  players.forEach(p => { state.peerMap[p.name] = p.peerId; });
+
+  // Use default settings for online mode
+  state.activeCategories = ['standard'];
+  state.totalRounds = 2;
+  state.timerSeconds = 120;
+  state.playMode = 'digital';
+
+  Network.broadcast({
+    type: 'game-start',
+    players: state.players,
+    config: {
+      totalRounds: state.totalRounds,
+      timerSeconds: state.timerSeconds,
+    }
+  });
+
+  SFX.roundStart(); haptic(30);
+  buildPoolAndStart();
+});
+
+// ============================================================
+//  HOST MESSAGE HANDLER
+// ============================================================
+function hostHandleMessage(peerId, msg) {
+  switch (msg.type) {
+    case 'submitted-prompts': {
+      const playerName = msg.playerName;
+      msg.prompts.forEach(text => {
+        if (!state.customPrompts.some(p => p.text === text)) {
+          state.customPrompts.push({ text, creator: playerName });
+        }
+      });
+      state._networkSubmitted = state._networkSubmitted || {};
+      state._networkSubmitted[playerName] = true;
+      // Check if all players submitted
+      if (state.players.every(p => state._networkSubmitted[p])) {
+        buildPoolAndStart();
+      }
+      break;
+    }
+
+    case 'picked-prompt': {
+      const idx = msg.index;
+      if (state._pickOptions && state._pickOptions[idx]) {
+        pickedPromptObj = state._pickOptions[idx];
+        $('#pick-prompt-btn').click();
+      }
+      break;
+    }
+
+    case 'confirmed-ranking': {
+      state.currentRanking = msg.ranking;
+      $('#confirm-ranking-btn').click();
+      break;
+    }
+
+    case 'sort-done': {
+      $('#sort-done-btn').click();
+      break;
+    }
+
+    case 'guessed': {
+      const name = msg.playerName;
+      state.guesses[name] = msg.prompt;
+      state.guessTimestamps[name] = timerRemaining;
+
+      const ranker = state.players[state.rankerIndex];
+      const guessers = state.players.filter(p => p !== ranker);
+      const allGuessed = guessers.every(g => state.guesses[g]);
+
+      Network.broadcast({
+        type: 'guess-update',
+        guessedPlayers: guessers.filter(g => state.guesses[g]),
+        allGuessed,
+      });
+
+      if (allGuessed) {
+        setTimeout(() => networkShowResults(), 500);
+      }
+      break;
+    }
+
+    case 'voted': {
+      state.promptVotes[msg.playerName] = msg.index;
+      const tab = document.querySelector(`#voter-tabs [data-voter="${msg.playerName}"]`);
+      if (tab) tab.classList.add('guessed');
+      const allVoted = state.players.every(p => state.promptVotes[p] != null);
+      $('#submit-votes-btn').disabled = !allVoted;
+      break;
+    }
+  }
+}
+
+// ============================================================
+//  CLIENT MESSAGE HANDLER
+// ============================================================
+function clientHandleMessage(from, msg) {
+  switch (msg.type) {
+    case 'lobby-update': {
+      const el = $('#lobby-player-list');
+      el.innerHTML = msg.players.map(name =>
+        `<div class="player-chip">${name}${name === Network.myName ? ' (you)' : ''}</div>`
+      ).join('');
+      $('#lobby-status').textContent = `${msg.players.length} players connected`;
+      break;
+    }
+
+    case 'game-start': {
+      state.players = msg.players;
+      state.timerSeconds = msg.config.timerSeconds;
+      state.totalRounds = msg.config.totalRounds;
+      state.scores = {};
+      state.streaks = {};
+      state.players.forEach(p => { state.scores[p] = 0; state.streaks[p] = 0; });
+      SFX.roundStart(); haptic(30);
+      showWaitScreen('Game starting...', '', '');
+      break;
+    }
+
+    case 'submit-prompts': {
+      clientShowSubmitScreen();
+      break;
+    }
+
+    case 'wait': {
+      showWaitScreen(msg.message, msg.detail, msg.sub);
+      break;
+    }
+
+    case 'pick-prompt': {
+      clientShowPickPrompt(msg);
+      break;
+    }
+
+    case 'secret-ranking': {
+      clientShowSecretRanking(msg);
+      break;
+    }
+
+    case 'sort-cards': {
+      clientShowSortScreen(msg);
+      break;
+    }
+
+    case 'guess': {
+      clientShowGuessScreen(msg);
+      break;
+    }
+
+    case 'guess-update': {
+      // Update which players have guessed
+      $$('#guesser-tabs .guesser-tab').forEach(tab => {
+        if (msg.guessedPlayers.includes(tab.dataset.guesser)) {
+          tab.classList.add('guessed');
+        }
+      });
+      break;
+    }
+
+    case 'result': {
+      clientShowResult(msg);
+      break;
+    }
+
+    case 'vote': {
+      clientShowVote(msg);
+      break;
+    }
+
+    case 'gameover': {
+      clientShowGameOver(msg);
+      break;
+    }
+  }
+}
+
+// ============================================================
+//  CLIENT SCREEN RENDERERS
+// ============================================================
+function clientShowSubmitScreen() {
+  state.playerSubmittedThisRound = [];
+  const input = $('#submit-prompt-input');
+  input.value = '';
+  $('#submit-player-name').textContent = Network.myName;
+  $('#submitted-prompts').innerHTML = '';
+  $('#submit-prompt-hint').textContent = 'Add at least 1 prompt';
+  const btn = $('#submit-done-btn');
+  btn.disabled = true;
+  btn.textContent = 'Submit Prompts';
+  btn._networkSubmit = true;
+  showScreen('submit');
+  input.focus();
+}
+
+function clientShowPickPrompt(msg) {
+  const optionsEl = $('#prompt-pick-options');
+  optionsEl.innerHTML = msg.options.map((text, i) =>
+    `<button class="prompt-pick-option" data-index="${i}">${text}</button>`
+  ).join('');
+
+  let selectedIdx = null;
+  optionsEl.onclick = (e) => {
+    const btn = e.target.closest('.prompt-pick-option');
+    if (!btn) return;
+    selectedIdx = +btn.dataset.index;
+    $$('.prompt-pick-option').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    $('#pick-prompt-btn').disabled = false;
+    SFX.tap(); haptic(15);
+  };
+
+  $('#pick-round-label').textContent = msg.roundLabel;
+  $('#pick-ranker-name').textContent = Network.myName;
+  $('#pick-hint-text').textContent = "Pick the one you like best - don't let anyone see!";
+  $('#pick-prompt-btn').disabled = true;
+  $('#pick-prompt-btn')._networkPick = () => selectedIdx;
+  showScreen('pick');
+}
+
+function clientShowSecretRanking(msg) {
+  const ranker = Network.myName;
+  $('#secret-round-label').textContent = msg.roundLabel;
+  $('#secret-ranker-name').textContent = ranker;
+  $('#secret-prompt-text').textContent = msg.prompt;
+
+  state.currentRanking = [...msg.players];
+  renderRankList();
+  showScreen('secret');
+
+  startTimer(
+    msg.timerSeconds || state.timerSeconds,
+    $('#secret-timer-fill'),
+    $('#secret-timer-text'),
+    $('#secret-timer'),
+    () => { $('#confirm-ranking-btn').click(); }
+  );
+}
+
+function clientShowSortScreen(msg) {
+  $('#sort-round-label').textContent = msg.roundLabel;
+  $('#sort-ranker-name').textContent = Network.myName;
+  $('#sort-prompt-text').textContent = msg.prompt;
+
+  SFX.roundStart(); haptic(30);
+  showScreen('sort');
+
+  startTimer(
+    msg.timerSeconds || state.timerSeconds,
+    $('#sort-timer-fill'),
+    $('#sort-timer-text'),
+    $('#sort-timer'),
+    () => { $('#sort-done-btn').click(); }
+  );
+}
+
+function clientShowGuessScreen(msg) {
+  $('#guess-round-label').textContent = msg.roundLabel;
+  $('#guess-header-text').textContent = 'Guess the prompt!';
+
+  const revealEl = $('#ranking-reveal');
+  const rankingSection = revealEl.parentElement;
+  if (msg.ranking && msg.ranking.length > 0) {
+    rankingSection.style.display = '';
+    revealEl.innerHTML = msg.ranking.map((name, i) =>
+      `<div class="rank-item">
+        <span class="rank-number">${i + 1}</span>
+        <span class="rank-name">${name}</span>
+      </div>`
+    ).join('');
+  } else {
+    rankingSection.style.display = 'none';
+  }
+
+  // Hide tabs in client mode - just show your own guess
+  $('#guesser-tabs').innerHTML = '';
+
+  const optionsEl = $('#guess-options');
+  optionsEl.innerHTML = msg.options.map(opt =>
+    `<button class="guess-option" data-prompt="${opt}">${opt}</button>`
+  ).join('');
+
+  let guessLocked = false;
+  optionsEl.onclick = (e) => {
+    const btn = e.target.closest('.guess-option');
+    if (!btn || guessLocked) return;
+    guessLocked = true;
+
+    $$('.guess-option').forEach(o => o.classList.remove('selected'));
+    btn.classList.add('selected');
+    SFX.swoosh(); haptic(30);
+
+    Network.sendToHost({
+      type: 'guessed',
+      playerName: Network.myName,
+      prompt: btn.dataset.prompt,
+    });
+
+    const overlay = document.getElementById('guess-overlay');
+    overlay.querySelector('.overlay-name').textContent = Network.myName;
+    overlay.querySelector('.overlay-text').textContent = 'Guess locked in!';
+    overlay.classList.add('visible');
+
+    setTimeout(() => {
+      overlay.classList.remove('visible');
+      showWaitScreen('Waiting for others...', '', '');
+    }, 1200);
+  };
+
+  $('#submit-guesses-btn').style.display = 'none';
+  $('#guesser-label').textContent = 'Pick your guess';
+  showScreen('guess');
+}
+
+function clientShowResult(msg) {
+  $('#result-round-label').textContent = msg.roundLabel;
+  $('#result-prompt-text').innerHTML = msg.promptHtml;
+
+  const banner = $('#result-banner');
+  banner.className = msg.bannerClass;
+  banner.textContent = msg.bannerText;
+
+  $('#round-scores').innerHTML = msg.roundScoresHtml;
+  renderClientTotalScores(msg.scores);
+
+  if (msg.correctCount > 0) { SFX.correct(); haptic([50, 30, 100]); }
+  else { SFX.wrong(); haptic(200); }
+
+  const nextBtn = $('#next-round-btn');
+  nextBtn.textContent = msg.isLastTurn ? 'See Final Scores' : 'Next';
+  nextBtn.style.display = 'none';
+  showScreen('result');
+}
+
+function clientShowVote(msg) {
+  const optionsEl = $('#vote-options');
+  optionsEl.innerHTML = msg.prompts.map((p, i) =>
+    `<button class="vote-option" data-index="${i}">
+      ${p.text}
+      <span class="vote-creator">by ${p.creator}</span>
+    </button>`
+  ).join('');
+
+  $('#voter-tabs').innerHTML = '';
+  $('#voter-label').textContent = 'Pick your favourite';
+
+  optionsEl.onclick = (e) => {
+    const btn = e.target.closest('.vote-option');
+    if (!btn) return;
+    $$('.vote-option').forEach(o => o.classList.remove('selected'));
+    btn.classList.add('selected');
+    SFX.tap(); haptic(15);
+
+    Network.sendToHost({
+      type: 'voted',
+      playerName: Network.myName,
+      index: +btn.dataset.index,
+    });
+
+    setTimeout(() => {
+      showWaitScreen('Vote submitted!', 'Waiting for others...', '');
+    }, 400);
+  };
+
+  $('#submit-votes-btn').style.display = 'none';
+  showScreen('vote');
+}
+
+function clientShowGameOver(msg) {
+  $('#winner-text').textContent = msg.winnerText;
+
+  const bpEl = $('#best-prompt-result');
+  if (msg.bestPromptHtml) {
+    bpEl.innerHTML = msg.bestPromptHtml;
+  } else {
+    bpEl.innerHTML = '';
+  }
+
+  renderClientTotalScores(msg.scores);
+  SFX.victory(); haptic([50, 50, 50, 50]);
+  showScreen('gameover');
+  launchConfetti();
+}
+
+function renderClientTotalScores(scores) {
+  const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  const html = sorted.map(([name, score]) =>
+    `<div class="score-row">
+      <span class="score-name">${name}</span>
+      <span class="score-value">${score}</span>
+    </div>`
+  ).join('');
+  const el = $('#final-scores');
+  if (el) el.innerHTML = html;
+  const el2 = $('#total-scores');
+  if (el2) el2.innerHTML = html;
+}
