@@ -44,6 +44,16 @@ const Network = (() => {
   function handleIncoming(conn) {
     conn.on('open', () => {
       const playerName = conn.metadata?.name || 'Player';
+
+      // Check for duplicate names
+      const taken = playerName === _myName ||
+        Array.from(connections.values()).some(c => c.name === playerName);
+      if (taken) {
+        conn.send({ type: 'error', message: 'Name already taken - pick a different one' });
+        setTimeout(() => conn.close(), 100);
+        return;
+      }
+
       connections.set(conn.peer, { conn, name: playerName });
       conn.on('data', (data) => emit('message', conn.peer, data));
       conn.on('close', () => {

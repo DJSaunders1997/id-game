@@ -1771,9 +1771,17 @@ $('#play-local-btn').addEventListener('click', () => {
   showScreen('home');
 });
 
+$('#lobby-name-input').addEventListener('input', () => {
+  $('#lobby-name-error').style.display = 'none';
+});
+
 $('#host-game-btn').addEventListener('click', async () => {
   const name = $('#lobby-name-input').value.trim();
-  if (!name) { $('#lobby-name-input').focus(); return; }
+  if (!name) {
+    $('#lobby-name-error').style.display = 'block';
+    $('#lobby-name-input').focus();
+    return;
+  }
 
   SFX.tap(); haptic(15);
   $('#host-game-btn').disabled = true;
@@ -1819,8 +1827,18 @@ $('#host-game-btn').addEventListener('click', async () => {
 $('#join-game-btn').addEventListener('click', async () => {
   const name = $('#lobby-name-input').value.trim();
   const code = $('#room-code-input').value.trim().toUpperCase();
-  if (!name) { $('#lobby-name-input').focus(); return; }
-  if (!code || code.length !== 4) { $('#room-code-input').focus(); return; }
+  if (!name) {
+    $('#lobby-name-error').style.display = 'block';
+    $('#lobby-name-input').focus();
+    return;
+  }
+  if (!code || code.length !== 4) {
+    $('#lobby-join-error').textContent = 'Enter a 4-letter room code';
+    $('#lobby-join-error').style.display = 'block';
+    $('#room-code-input').focus();
+    return;
+  }
+  $('#lobby-join-error').style.display = 'none';
 
   SFX.tap(); haptic(15);
   $('#join-game-btn').disabled = true;
@@ -1839,10 +1857,15 @@ $('#join-game-btn').addEventListener('click', async () => {
 
     Network.on('message', clientHandleMessage);
   } catch (err) {
-    alert('Failed to join: ' + err.message);
+    $('#lobby-join-error').textContent = 'Could not find room - check the code';
+    $('#lobby-join-error').style.display = 'block';
     $('#join-game-btn').disabled = false;
     $('#join-game-btn').textContent = 'Join';
   }
+});
+
+$('#room-code-input').addEventListener('input', () => {
+  $('#lobby-join-error').style.display = 'none';
 });
 
 $('#lobby-start-btn').addEventListener('click', () => {
@@ -1901,16 +1924,60 @@ $('#share-link-btn').addEventListener('click', () => {
   SFX.tap(); haptic(15);
 });
 
-// ---- Auto-fill room code from URL ----
+// ---- Auto-join from URL ?room= param ----
 (function checkUrlRoom() {
   const params = new URLSearchParams(window.location.search);
   const room = params.get('room');
   if (room) {
-    $('#room-code-input').value = room.toUpperCase();
-    $('#lobby-name-input').focus();
+    const code = room.toUpperCase();
+    state._joinRoomCode = code;
+    // Hide full lobby, show join-only view
+    $('#lobby-menu').style.display = 'none';
+    $('#lobby-join-direct').style.display = 'block';
+    $('#lobby-direct-code').textContent = code;
     window.history.replaceState({}, '', window.location.pathname);
   }
 })();
+
+$('#direct-join-btn').addEventListener('click', async () => {
+  const name = $('#direct-name-input').value.trim();
+  if (!name) {
+    $('#direct-name-error').style.display = 'block';
+    $('#direct-name-input').focus();
+    return;
+  }
+  $('#direct-name-error').style.display = 'none';
+  $('#direct-join-error').style.display = 'none';
+  $('#direct-join-btn').disabled = true;
+  $('#direct-join-btn').textContent = 'Joining...';
+
+  try {
+    await Network.joinRoom(state._joinRoomCode, name);
+    state.networkMode = 'client';
+
+    $('#lobby-join-direct').style.display = 'none';
+    $('#lobby-room-info').style.display = 'block';
+    $('#lobby-client-wait').style.display = 'block';
+    $('#lobby-room-code').textContent = state._joinRoomCode;
+    $('#lobby-player-list').innerHTML = `<div class="player-chip">${name} (you)</div>`;
+    $('#lobby-status').textContent = 'Connected! Waiting for host...';
+
+    Network.on('message', clientHandleMessage);
+  } catch (err) {
+    $('#direct-join-error').textContent = 'Could not find room - check the code';
+    $('#direct-join-error').style.display = 'block';
+    $('#direct-join-btn').disabled = false;
+    $('#direct-join-btn').textContent = 'Join Game';
+  }
+});
+
+$('#direct-name-input').addEventListener('input', () => {
+  $('#direct-name-error').style.display = 'none';
+});
+
+$('#direct-name-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('#direct-join-btn').click();
+});
 
 // ============================================================
 //  HOST MESSAGE HANDLER
@@ -1990,6 +2057,29 @@ function hostHandleMessage(peerId, msg) {
 // ============================================================
 function clientHandleMessage(from, msg) {
   switch (msg.type) {
+    case 'error': {
+      // Rejected by host (e.g. duplicate name) — reset to join form
+      Network.destroy();
+      state.networkMode = 'local';
+      $('#lobby-room-info').style.display = 'none';
+      $('#lobby-client-wait').style.display = 'none';
+      if (state._joinRoomCode) {
+        // Came from direct-join link
+        $('#lobby-join-direct').style.display = 'block';
+        $('#direct-join-error').textContent = msg.message;
+        $('#direct-join-error').style.display = 'block';
+        $('#direct-join-btn').disabled = false;
+        $('#direct-join-btn').textContent = 'Join Game';
+      } else {
+        $('#lobby-menu').style.display = 'block';
+        $('#lobby-join-error').textContent = msg.message;
+        $('#lobby-join-error').style.display = 'block';
+        $('#join-game-btn').disabled = false;
+        $('#join-game-btn').textContent = 'Join';
+      }
+      break;
+    }
+
     case 'lobby-update': {
       const el = $('#lobby-player-list');
       el.innerHTML = msg.players.map(name =>

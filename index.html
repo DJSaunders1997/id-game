@@ -42,14 +42,29 @@
 
       <div style="border-top:1px solid var(--surface-2); padding-top:16px;">
         <div class="section-title">Play Online</div>
-        <div class="add-row" style="margin-bottom:12px;">
+        <div class="add-row" style="margin-bottom:4px;">
           <input type="text" id="lobby-name-input" placeholder="Your name..." maxlength="20">
         </div>
+        <div id="lobby-name-error" style="color:var(--danger); font-size:0.8rem; margin-bottom:10px; display:none;">Enter your name first</div>
         <button class="btn btn-primary btn-block" id="host-game-btn" style="margin-bottom:10px;">Host Game</button>
         <div class="add-row">
           <input type="text" id="room-code-input" placeholder="Room code" maxlength="4" style="text-transform:uppercase;">
           <button class="btn btn-primary btn-small" id="join-game-btn">Join</button>
         </div>
+        <div id="lobby-join-error" style="color:var(--danger); font-size:0.8rem; margin-top:4px; display:none;"></div>
+      </div>
+    </div>
+
+    <div class="card" id="lobby-join-direct" style="display:none;">
+      <div class="section-title" style="text-align:center;">Join Room <span id="lobby-direct-code" style="font-family:monospace; letter-spacing:2px; color:var(--accent);"></span></div>
+      <div class="add-row" style="margin:16px 0 4px;">
+        <input type="text" id="direct-name-input" placeholder="Your name..." maxlength="20" autofocus>
+      </div>
+      <div id="direct-name-error" style="color:var(--danger); font-size:0.8rem; margin-bottom:10px; display:none;">Enter your name to join</div>
+      <div id="direct-join-error" style="color:var(--danger); font-size:0.8rem; margin-bottom:10px; display:none;"></div>
+      <button class="btn btn-primary btn-block" id="direct-join-btn">Join Game</button>
+      <div class="text-dim text-center" style="font-size:0.8rem; margin-top:12px;">
+        <a href="." style="color:var(--text-dim);">Back to home</a>
       </div>
     </div>
 
