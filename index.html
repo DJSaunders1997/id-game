@@ -97,9 +97,17 @@
   <!-- ====== SCREEN: WAIT ====== -->
   <div id="screen-wait" class="screen">
     <div class="pass-device">
+      <div class="wait-pulse" id="wait-pulse"></div>
       <div class="instruction" id="wait-message">Waiting...</div>
       <div class="player-name" id="wait-detail"></div>
       <div class="text-dim" id="wait-sub"></div>
+      <div id="wait-progress" style="display:none; width:100%; max-width:320px;">
+        <div id="wait-progress-list" class="wait-progress-list"></div>
+      </div>
+      <div class="timer-bar" id="wait-timer" style="display:none; width:100%; max-width:320px; margin-top:16px;">
+        <div class="timer-track"><div class="timer-fill" id="wait-timer-fill"></div></div>
+        <span id="wait-timer-text"></span>
+      </div>
     </div>
   </div>
 
@@ -183,7 +191,7 @@
           <div class="text-dim" style="font-size:0.75rem;">How many prompt cards the ranker picks from</div>
           <div class="number-selector" style="margin:6px 0;">
             <button id="pick-count-minus">-</button>
-            <div class="num" id="pick-count-num">5</div>
+            <div class="num" id="pick-count-num">3</div>
             <button id="pick-count-plus">+</button>
           </div>
         </div>

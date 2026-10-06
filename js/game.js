@@ -26,7 +26,7 @@ let state = {
   networkMode: 'local',         // 'local', 'host', 'client'
   peerMap: {},                  // playerName -> peerId
   playMode: 'digital',          // 'digital' or 'physical'
-  pickCount: 5,                 // how many prompts the ranker picks from
+  pickCount: 3,                 // how many prompts the ranker picks from
   guessOptionCount: 4,          // how many options each guesser sees (1 correct + N-1 decoys)
   cardReplace: 'used',          // 'used' = only remove picked card, 'all' = replace all shown cards
   // Physical mode only
@@ -1222,34 +1222,40 @@ function networkShowGuessScreen(ranker, guessers) {
     }
   });
 
-  // Ranker waits (or sees a dashboard on host)
+  // Ranker waits with progress tracker
   const rankerPeerId = state.peerMap[ranker];
+  const timerExpire = () => {
+    guessers.forEach(g => {
+      if (!state.guesses[g]) {
+        state.guesses[g] = options[Math.floor(Math.random() * options.length)];
+      }
+    });
+    networkShowResults();
+  };
+
   if (rankerPeerId === 'host') {
-    // Host is ranker - show waiting screen with guess progress
-    showWaitScreen('Waiting for guesses...', getRoundLabel(), '');
+    showWaitScreen('Waiting for guesses...', getRoundLabel(), '', {
+      players: guessers,
+      timer: state.timerSeconds,
+      onExpire: timerExpire,
+    });
   } else {
     Network.sendTo(rankerPeerId, {
       type: 'wait',
       message: 'Waiting for everyone to guess...',
       detail: getRoundLabel(),
+      players: guessers,
+      timer: state.timerSeconds,
     });
+    // Host still needs to run the authoritative timer
+    startTimer(
+      state.timerSeconds,
+      document.createElement('div'),
+      document.createElement('span'),
+      document.createElement('div'),
+      timerExpire
+    );
   }
-
-  // Start timer on host
-  startTimer(
-    state.timerSeconds,
-    $('#guess-timer-fill') || document.createElement('div'),
-    $('#guess-timer-text') || document.createElement('span'),
-    $('#guess-timer') || document.createElement('div'),
-    () => {
-      guessers.forEach(g => {
-        if (!state.guesses[g]) {
-          state.guesses[g] = options[Math.floor(Math.random() * options.length)];
-        }
-      });
-      networkShowResults();
-    }
-  );
 }
 
 function updateGuessUI(guesser, rankerEnters) {
@@ -1702,7 +1708,7 @@ $('#new-game-btn').addEventListener('click', () => {
   state.currentPromptCreator = null;
   state.activeCategories = ['standard'];
   state.playMode = 'digital';
-  state.pickCount = 5;
+  state.pickCount = 3;
   state.guessOptionCount = 4;
   state.cardReplace = 'used';
   state.showRankingOnPhone = false;
@@ -1715,7 +1721,7 @@ $('#new-game-btn').addEventListener('click', () => {
   });
   $('#mode-description').textContent = modeDescriptions.digital;
   $('#physical-settings').style.display = 'none';
-  $('#pick-count-num').textContent = '5';
+  $('#pick-count-num').textContent = '3';
   $('#guess-count-num').textContent = '4';
   $$('#replace-toggle .mode-btn').forEach(b => b.classList.toggle('active', b.dataset.replace === 'used'));
   $$('#show-ranking-toggle .mode-btn').forEach(b => b.classList.toggle('active', b.dataset.val === 'false'));
@@ -1738,11 +1744,46 @@ updateActiveCategories();
 // ============================================================
 //  LOBBY (online multiplayer)
 // ============================================================
-function showWaitScreen(message, detail, sub) {
+function showWaitScreen(message, detail, sub, opts) {
   $('#wait-message').textContent = message || 'Waiting...';
   $('#wait-detail').textContent = detail || '';
   $('#wait-sub').textContent = sub || '';
+
+  // Player progress dots
+  const progressEl = $('#wait-progress');
+  const listEl = $('#wait-progress-list');
+  if (opts?.players?.length) {
+    listEl.innerHTML = opts.players.map(name =>
+      `<div class="wait-player-dot" data-player="${name}"><span class="dot"></span>${name}</div>`
+    ).join('');
+    progressEl.style.display = 'block';
+  } else {
+    progressEl.style.display = 'none';
+    listEl.innerHTML = '';
+  }
+
+  // Optional timer on the wait screen
+  if (opts?.timer > 0) {
+    startTimer(
+      opts.timer,
+      $('#wait-timer-fill'),
+      $('#wait-timer-text'),
+      $('#wait-timer'),
+      opts.onExpire || null
+    );
+  } else {
+    $('#wait-timer').style.display = 'none';
+  }
+
   showScreen('wait');
+}
+
+function updateWaitProgress(donePlayers) {
+  $$('#wait-progress-list .wait-player-dot').forEach(dot => {
+    if (donePlayers.includes(dot.dataset.player)) {
+      dot.classList.add('done');
+    }
+  });
 }
 
 function renderLobbyPlayers() {
@@ -2029,11 +2070,15 @@ function hostHandleMessage(peerId, msg) {
       const guessers = state.players.filter(p => p !== ranker);
       const allGuessed = guessers.every(g => state.guesses[g]);
 
+      const guessedPlayers = guessers.filter(g => state.guesses[g]);
       Network.broadcast({
         type: 'guess-update',
-        guessedPlayers: guessers.filter(g => state.guesses[g]),
+        guessedPlayers,
         allGuessed,
       });
+
+      // Update host's wait screen if host is ranker
+      updateWaitProgress(guessedPlayers);
 
       if (allGuessed) {
         setTimeout(() => networkShowResults(), 500);
@@ -2107,7 +2152,10 @@ function clientHandleMessage(from, msg) {
     }
 
     case 'wait': {
-      showWaitScreen(msg.message, msg.detail, msg.sub);
+      showWaitScreen(msg.message, msg.detail, msg.sub, {
+        players: msg.players,
+        timer: msg.timer,
+      });
       break;
     }
 
@@ -2132,12 +2180,14 @@ function clientHandleMessage(from, msg) {
     }
 
     case 'guess-update': {
-      // Update which players have guessed
+      // Update guess screen tabs
       $$('#guesser-tabs .guesser-tab').forEach(tab => {
         if (msg.guessedPlayers.includes(tab.dataset.guesser)) {
           tab.classList.add('guessed');
         }
       });
+      // Update wait screen progress (ranker sees this)
+      updateWaitProgress(msg.guessedPlayers);
       break;
     }
 
@@ -2286,7 +2336,11 @@ function clientShowGuessScreen(msg) {
 
     setTimeout(() => {
       overlay.classList.remove('visible');
-      showWaitScreen('Waiting for others...', '', '');
+      const guessers = state.players.filter((_, i) => i !== state.rankerIndex);
+      showWaitScreen('Waiting for others...', '', '', {
+        players: guessers,
+      });
+      updateWaitProgress([Network.myName]);
     }, 1200);
   };
 
