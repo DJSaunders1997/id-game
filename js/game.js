@@ -1788,6 +1788,13 @@ $('#host-game-btn').addEventListener('click', async () => {
     $('#lobby-host-actions').style.display = 'block';
     $('#lobby-room-code').textContent = code;
 
+    const joinUrl = window.location.origin + window.location.pathname + '?room=' + code;
+    $('#lobby-join-link').value = joinUrl;
+    $('#lobby-join-link-area').style.display = 'block';
+    if (navigator.share) {
+      $('#share-link-btn').style.display = 'block';
+    }
+
     Network.on('player-join', (peerId, playerName) => {
       SFX.tap(); haptic(15);
       renderLobbyPlayers();
@@ -1865,6 +1872,45 @@ $('#lobby-start-btn').addEventListener('click', () => {
   SFX.roundStart(); haptic(30);
   buildPoolAndStart();
 });
+
+// ---- Copy / Share join link ----
+$('#copy-link-btn').addEventListener('click', () => {
+  const link = $('#lobby-join-link').value;
+  navigator.clipboard.writeText(link).then(() => {
+    const btn = $('#copy-link-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+  }).catch(() => {
+    $('#lobby-join-link').select();
+  });
+  SFX.tap(); haptic(15);
+});
+
+$('#lobby-join-link').addEventListener('click', () => {
+  $('#lobby-join-link').select();
+});
+
+$('#share-link-btn').addEventListener('click', () => {
+  const link = $('#lobby-join-link').value;
+  const code = Network.roomCode;
+  navigator.share({
+    title: 'Join Rank & Guess',
+    text: `Join my Rank & Guess game! Room code: ${code}`,
+    url: link,
+  }).catch(() => {});
+  SFX.tap(); haptic(15);
+});
+
+// ---- Auto-fill room code from URL ----
+(function checkUrlRoom() {
+  const params = new URLSearchParams(window.location.search);
+  const room = params.get('room');
+  if (room) {
+    $('#room-code-input').value = room.toUpperCase();
+    $('#lobby-name-input').focus();
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+})();
 
 // ============================================================
 //  HOST MESSAGE HANDLER

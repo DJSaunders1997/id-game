@@ -55,6 +55,13 @@
 
     <div class="card" id="lobby-room-info" style="display:none;">
       <div class="section-title">Room <span id="lobby-room-code" style="font-family:monospace; letter-spacing:3px; font-size:1.4rem; color:var(--accent);"></span></div>
+      <div id="lobby-join-link-area" style="display:none; margin:10px 0;">
+        <div class="add-row">
+          <input type="text" id="lobby-join-link" readonly style="font-size:0.8rem; cursor:pointer;">
+          <button class="btn btn-primary btn-small" id="copy-link-btn">Copy</button>
+        </div>
+        <button class="btn btn-secondary btn-block" id="share-link-btn" style="margin-top:8px; display:none;">Share Link</button>
+      </div>
       <div id="lobby-player-list" class="player-list" style="margin:12px 0;"></div>
       <div class="text-dim" id="lobby-status" style="font-size:0.85rem;"></div>
     </div>
