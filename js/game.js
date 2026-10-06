@@ -729,14 +729,41 @@ $('#pick-prompt-btn').addEventListener('click', () => {
 
   if (state.playMode === 'physical') {
     state.currentRanking = [];
-    state.guesses = {};
-    state.guessTimestamps = {};
-    state.roundScores = {};
-    state.players.forEach(p => state.roundScores[p] = 0);
-    showGuessScreen();
+    showSortScreen();
   } else {
     showSecretRanking();
   }
+});
+
+// ============================================================
+//  SORT CARDS SCREEN (physical mode)
+// ============================================================
+function showSortScreen() {
+  const ranker = state.players[state.rankerIndex];
+  $('#sort-round-label').textContent = getRoundLabel();
+  $('#sort-ranker-name').textContent = ranker;
+  $('#sort-prompt-text').textContent = state.currentPrompt;
+
+  SFX.roundStart(); haptic(30);
+  showScreen('sort');
+
+  startTimer(
+    state.timerSeconds,
+    $('#sort-timer-fill'),
+    $('#sort-timer-text'),
+    $('#sort-timer'),
+    () => { $('#sort-done-btn').click(); }
+  );
+}
+
+$('#sort-done-btn').addEventListener('click', () => {
+  stopTimer();
+  state.guesses = {};
+  state.guessTimestamps = {};
+  state.roundScores = {};
+  state.players.forEach(p => state.roundScores[p] = 0);
+  SFX.select(); haptic(30);
+  showGuessScreen();
 });
 
 function showSecretRanking() {
