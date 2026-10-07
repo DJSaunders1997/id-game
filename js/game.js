@@ -609,7 +609,7 @@ $('#submit-done-btn').addEventListener('click', () => {
       playerName: Network.myName,
       prompts: state.playerSubmittedThisRound,
     });
-    showWaitScreen('Prompts submitted!', 'Waiting for others...', '');
+    showWaitScreen('Prompts submitted!', 'Waiting for everyone to submit...', '');
     return;
   }
 
@@ -1775,6 +1775,9 @@ function showWaitScreen(message, detail, sub, opts) {
     $('#wait-timer').style.display = 'none';
   }
 
+  // Emoji picker only in networked games
+  $('#emoji-picker').style.display = state.networkMode !== 'local' ? 'flex' : 'none';
+
   showScreen('wait');
 }
 
@@ -1785,6 +1788,113 @@ function updateWaitProgress(donePlayers) {
     }
   });
 }
+
+// ============================================================
+//  EMOJI REACTIONS
+// ============================================================
+function spawnEmojiFloat(emoji, senderName) {
+  const overlay = $('#emoji-overlay');
+  const el = document.createElement('div');
+  el.className = 'emoji-float';
+  el.textContent = emoji;
+  if (senderName) {
+    const label = document.createElement('span');
+    label.className = 'emoji-sender';
+    label.textContent = senderName;
+    el.appendChild(label);
+  }
+  el.style.left = (15 + Math.random() * 70) + '%';
+  el.style.bottom = '10%';
+  overlay.appendChild(el);
+  el.addEventListener('animationend', () => el.remove());
+}
+
+let _emojiCooldown = false;
+$('#emoji-picker').addEventListener('click', (e) => {
+  const btn = e.target.closest('.emoji-btn');
+  if (!btn || _emojiCooldown) return;
+  const emoji = btn.dataset.emoji;
+
+  _emojiCooldown = true;
+  setTimeout(() => { _emojiCooldown = false; }, 300);
+
+  SFX.tap();
+  haptic(15);
+  btn.style.transform = 'scale(1.3)';
+  setTimeout(() => { btn.style.transform = ''; }, 150);
+
+  const myName = state.networkMode !== 'local' ? Network.myName : '';
+
+  if (state.networkMode === 'host') {
+    Network.broadcast({ type: 'emoji-burst', emoji, sender: myName });
+    spawnEmojiFloat(emoji, myName);
+  } else if (state.networkMode === 'client') {
+    Network.sendToHost({ type: 'emoji-reaction', emoji, sender: myName });
+    spawnEmojiFloat(emoji, myName);
+  }
+});
+
+// ---- Photo reactions ----
+function compressImage(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const size = 150;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const min = Math.min(img.width, img.height);
+      const sx = (img.width - min) / 2;
+      const sy = (img.height - min) / 2;
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+      resolve(canvas.toDataURL('image/jpeg', 0.5));
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function spawnPhotoFloat(dataUrl, senderName) {
+  const overlay = $('#emoji-overlay');
+  const el = document.createElement('div');
+  el.className = 'photo-float';
+  const imgEl = document.createElement('img');
+  imgEl.src = dataUrl;
+  el.appendChild(imgEl);
+  if (senderName) {
+    const label = document.createElement('span');
+    label.className = 'emoji-sender';
+    label.textContent = senderName;
+    el.appendChild(label);
+  }
+  el.style.left = (10 + Math.random() * 60) + '%';
+  el.style.top = (15 + Math.random() * 40) + '%';
+  overlay.appendChild(el);
+  el.addEventListener('animationend', () => el.remove());
+}
+
+$('#emoji-cam-btn').addEventListener('click', () => {
+  $('#emoji-cam-input').click();
+});
+
+$('#emoji-cam-input').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  e.target.value = '';
+
+  const dataUrl = await compressImage(file);
+  const myName = state.networkMode !== 'local' ? Network.myName : '';
+
+  if (state.networkMode === 'host') {
+    Network.broadcast({ type: 'photo-burst', photo: dataUrl, sender: myName });
+    spawnPhotoFloat(dataUrl, myName);
+  } else if (state.networkMode === 'client') {
+    Network.sendToHost({ type: 'photo-reaction', photo: dataUrl, sender: myName });
+    spawnPhotoFloat(dataUrl, myName);
+  }
+  SFX.select();
+  haptic(30);
+});
 
 function renderLobbyPlayers() {
   const players = Network.getPlayerList();
@@ -2086,6 +2196,18 @@ function hostHandleMessage(peerId, msg) {
       break;
     }
 
+    case 'emoji-reaction': {
+      Network.broadcast({ type: 'emoji-burst', emoji: msg.emoji, sender: msg.sender });
+      spawnEmojiFloat(msg.emoji, msg.sender);
+      break;
+    }
+
+    case 'photo-reaction': {
+      Network.broadcast({ type: 'photo-burst', photo: msg.photo, sender: msg.sender });
+      spawnPhotoFloat(msg.photo, msg.sender);
+      break;
+    }
+
     case 'voted': {
       state.promptVotes[msg.playerName] = msg.index;
       const tab = document.querySelector(`#voter-tabs [data-voter="${msg.playerName}"]`);
@@ -2198,6 +2320,20 @@ function clientHandleMessage(from, msg) {
 
     case 'vote': {
       clientShowVote(msg);
+      break;
+    }
+
+    case 'emoji-burst': {
+      if (msg.sender !== Network.myName) {
+        spawnEmojiFloat(msg.emoji, msg.sender);
+      }
+      break;
+    }
+
+    case 'photo-burst': {
+      if (msg.sender !== Network.myName) {
+        spawnPhotoFloat(msg.photo, msg.sender);
+      }
       break;
     }
 
@@ -2337,7 +2473,7 @@ function clientShowGuessScreen(msg) {
     setTimeout(() => {
       overlay.classList.remove('visible');
       const guessers = state.players.filter((_, i) => i !== state.rankerIndex);
-      showWaitScreen('Waiting for others...', '', '', {
+      showWaitScreen('Guess locked in!', 'Waiting for everyone to guess...', '', {
         players: guessers,
       });
       updateWaitProgress([Network.myName]);
@@ -2395,7 +2531,7 @@ function clientShowVote(msg) {
     });
 
     setTimeout(() => {
-      showWaitScreen('Vote submitted!', 'Waiting for others...', '');
+      showWaitScreen('Vote submitted!', 'Waiting for everyone to vote...', '');
     }, 400);
   };
 

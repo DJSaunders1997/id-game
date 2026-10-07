@@ -26,6 +26,7 @@
     <div class="overlay-name"></div>
   </div>
 </div>
+<div id="emoji-overlay" class="emoji-overlay"></div>
 <canvas id="confetti-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;display:none;"></canvas>
 <div class="app">
 
@@ -107,6 +108,16 @@
       <div class="timer-bar" id="wait-timer" style="display:none; width:100%; max-width:320px; margin-top:16px;">
         <div class="timer-track"><div class="timer-fill" id="wait-timer-fill"></div></div>
         <span id="wait-timer-text"></span>
+      </div>
+      <div id="emoji-picker" class="emoji-picker" style="display:none;">
+        <button class="emoji-btn" data-emoji="🔥">🔥</button>
+        <button class="emoji-btn" data-emoji="⏰">⏰</button>
+        <button class="emoji-btn" data-emoji="😂">😂</button>
+        <button class="emoji-btn" data-emoji="💀">💀</button>
+        <button class="emoji-btn" data-emoji="👀">👀</button>
+        <button class="emoji-btn" data-emoji="🎉">🎉</button>
+        <button class="emoji-btn emoji-cam-btn" id="emoji-cam-btn" title="Send a photo">📷</button>
+        <input type="file" id="emoji-cam-input" accept="image/*" capture="environment" style="display:none;">
       </div>
     </div>
   </div>
