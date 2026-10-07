@@ -8,6 +8,24 @@ const Network = (() => {
   let _myName = '';
   let handlers = {};
 
+  // WebRTC needs STUN to discover public IPs and TURN to relay traffic when
+  // direct connections fail (e.g. phones on mobile data, strict NAT/firewalls).
+  // Without TURN, connections between devices on different networks silently fail.
+  const peerConfig = {
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+      ],
+    },
+    debug: 1,
+  };
+
+  function log(...args) { console.log('[Network]', ...args); }
+
   function generateCode() {
     const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
     return Array.from({length: 4}, () => c[Math.floor(Math.random() * c.length)]).join('');
@@ -21,15 +39,18 @@ const Network = (() => {
       _myName = name;
       roomCode = generateCode();
       _isHost = true;
-      peer = new Peer('rankguess-' + roomCode);
+      log('Creating room', roomCode);
+      peer = new Peer('rankguess-' + roomCode, peerConfig);
 
-      peer.on('open', () => resolve(roomCode));
+      peer.on('open', (id) => { log('Host registered as', id); resolve(roomCode); });
       peer.on('error', (err) => {
+        log('Host error:', err.type, err.message);
         if (err.type === 'unavailable-id') {
           roomCode = generateCode();
           peer.destroy();
-          peer = new Peer('rankguess-' + roomCode);
-          peer.on('open', () => resolve(roomCode));
+          log('Retrying with code', roomCode);
+          peer = new Peer('rankguess-' + roomCode, peerConfig);
+          peer.on('open', (id) => { log('Host registered as', id); resolve(roomCode); });
           peer.on('error', reject);
           peer.on('connection', handleIncoming);
         } else {
@@ -42,8 +63,10 @@ const Network = (() => {
   }
 
   function handleIncoming(conn) {
+    log('Incoming connection from', conn.peer);
     conn.on('open', () => {
       const playerName = conn.metadata?.name || 'Player';
+      log('Connection open:', playerName);
 
       // Check for duplicate names
       const taken = playerName === _myName ||
@@ -69,23 +92,26 @@ const Network = (() => {
       _myName = name;
       roomCode = code.toUpperCase();
       _isHost = false;
-      peer = new Peer();
+      log('Joining room', roomCode, 'as', name);
+      peer = new Peer(undefined, peerConfig);
 
-      peer.on('open', () => {
+      peer.on('open', (myId) => {
+        log('Client registered as', myId, '- connecting to host');
         hostConn = peer.connect('rankguess-' + roomCode, {
           metadata: { name },
           reliable: true,
         });
         hostConn.on('open', () => {
+          log('Connected to host!');
           hostConn.on('data', (data) => emit('message', 'host', data));
-          hostConn.on('close', () => emit('disconnected'));
+          hostConn.on('close', () => { log('Host connection closed'); emit('disconnected'); });
           resolve();
         });
-        hostConn.on('error', reject);
+        hostConn.on('error', (err) => { log('Connection error:', err); reject(err); });
         setTimeout(() => reject(new Error('Connection timed out')), 10000);
       });
 
-      peer.on('error', reject);
+      peer.on('error', (err) => { log('Peer error:', err.type, err.message); reject(err); });
     });
   }
 

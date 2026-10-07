@@ -723,6 +723,13 @@ function networkStartPick() {
     };
     $('#pick-hint-text').textContent = "Pick the one you like best!";
     $('#pick-prompt-btn').disabled = true;
+    startTimer(30, $('#pick-timer-fill'), $('#pick-timer-text'), $('#pick-timer'), () => {
+      if (!pickedPromptObj) {
+        const randIdx = Math.floor(Math.random() * options.length);
+        pickedPromptObj = options[randIdx];
+      }
+      $('#pick-prompt-btn').click();
+    });
     showScreen('pick');
   } else {
     Network.sendTo(rankerPeerId, {
@@ -775,10 +782,19 @@ function showPickPrompt() {
     ? 'Pick a card, then rank the group using your real cards'
     : "Pick the one you like best - don't let anyone see!";
   $('#pick-prompt-btn').disabled = true;
+  startTimer(30, $('#pick-timer-fill'), $('#pick-timer-text'), $('#pick-timer'), () => {
+    if (!pickedPromptObj) {
+      const randIdx = Math.floor(Math.random() * options.length);
+      pickedPromptObj = options[randIdx];
+    }
+    $('#pick-prompt-btn').click();
+  });
   showScreen('pick');
 }
 
 $('#pick-prompt-btn').addEventListener('click', () => {
+  stopTimer();
+
   // Client mode - send pick to host
   if (state.networkMode === 'client' && $('#pick-prompt-btn')._networkPick) {
     const idx = $('#pick-prompt-btn')._networkPick();
@@ -1969,7 +1985,9 @@ $('#host-game-btn').addEventListener('click', async () => {
 
     renderLobbyPlayers();
   } catch (err) {
-    alert('Failed to create room: ' + err.message);
+    console.error('[Host]', err);
+    $('#lobby-name-error').textContent = 'Could not create room - PeerJS server may be down, try again';
+    $('#lobby-name-error').style.display = 'block';
     $('#host-game-btn').disabled = false;
     $('#host-game-btn').textContent = 'Host Game';
   }
@@ -2008,7 +2026,11 @@ $('#join-game-btn').addEventListener('click', async () => {
 
     Network.on('message', clientHandleMessage);
   } catch (err) {
-    $('#lobby-join-error').textContent = 'Could not find room - check the code';
+    console.error('[Join]', err);
+    const msg = err.message?.includes('timed out')
+      ? 'Connection timed out - is the host still in the lobby?'
+      : 'Could not connect - check the code and try again';
+    $('#lobby-join-error').textContent = msg;
     $('#lobby-join-error').style.display = 'block';
     $('#join-game-btn').disabled = false;
     $('#join-game-btn').textContent = 'Join';
@@ -2115,7 +2137,11 @@ $('#direct-join-btn').addEventListener('click', async () => {
 
     Network.on('message', clientHandleMessage);
   } catch (err) {
-    $('#direct-join-error').textContent = 'Could not find room - check the code';
+    console.error('[Direct join]', err);
+    const msg = err.message?.includes('timed out')
+      ? 'Connection timed out - is the host still in the lobby?'
+      : 'Could not connect - check the code and try again';
+    $('#direct-join-error').textContent = msg;
     $('#direct-join-error').style.display = 'block';
     $('#direct-join-btn').disabled = false;
     $('#direct-join-btn').textContent = 'Join Game';
@@ -2384,6 +2410,12 @@ function clientShowPickPrompt(msg) {
   $('#pick-hint-text').textContent = "Pick the one you like best - don't let anyone see!";
   $('#pick-prompt-btn').disabled = true;
   $('#pick-prompt-btn')._networkPick = () => selectedIdx;
+  startTimer(30, $('#pick-timer-fill'), $('#pick-timer-text'), $('#pick-timer'), () => {
+    if (selectedIdx == null) {
+      selectedIdx = Math.floor(Math.random() * msg.options.length);
+    }
+    $('#pick-prompt-btn').click();
+  });
   showScreen('pick');
 }
 
